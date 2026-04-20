@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>하수구막힘 배관전문 - 서울 인천 경기 24시간 긴급출동</title>
+    <meta name="description" content="서울 인천 경기 하수구막힘 변기막힘 싱크대역류 배관전문. 내시경진단 고압세척 당일해결. 지금 바로 전화하세요.">
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0iIzE2YTM0YSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTUlIiBmb250LXNpemU9IjE4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0iY2VudHJhbCI+8J+SqTwvdGV4dD48L3N2Zz4=" type="image/svg+xml">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        html{scroll-behavior:smooth}
+        body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#fff;color:#111;overflow-x:hidden}
+
+        /* 상단 긴급 띠 */
+        .top-bar{background:#111;padding:10px 20px;text-align:center;font-size:.85em;color:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap}
+        .top-bar a{color:#4ade80;font-weight:900;text-decoration:none;font-size:1em}
+        .top-bar .sep{color:rgba(255,255,255,.2)}
+
+        /* 네비 */
+        nav{background:#fff;padding:18px 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f0f0f0;position:sticky;top:0;z-index:100}
+        .nav-logo{font-size:1.3em;font-weight:900;color:#111;display:flex;align-items:center;gap:6px}
+        .nav-logo span{color:#16a34a}
+        .nav-call{background:#111;color:#fff;padding:11px 24px;border-radius:6px;text-decoration:none;font-weight:700;font-size:.9em;display:flex;align-items:center;gap:8px;transition:background .2s}
+        .nav-call:hover{background:#333}
+
+        /* 히어로 - 좌우분할 대형 레이아웃 */
+        .hero{min-height:92vh;display:grid;grid-template-columns:1fr 1fr;position:relative;overflow:hidden}
+        .hero-left{background:#111;display:flex;flex-direction:column;justify-content:center;padding:80px 60px;position:relative;overflow:hidden}
+        .hero-left::before{content:'';position:absolute;top:-100px;left:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(74,222,128,.08),transparent 60%);border-radius:50%}
+        .hero-left::after{content:'';position:absolute;bottom:-100px;right:-50px;width:300px;height:300px;background:radial-gradient(circle,rgba(74,222,128,.05),transparent 60%);border-radius:50%}
+
+        .hero-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.25);color:#4ade80;padding:7px 16px;border-radius:4px;font-size:.78em;font-weight:700;letter-spacing:2px;margin-bottom:30px}
+        .hero-left h1{font-size:clamp(2.5em,4.5vw,4em);font-weight:900;color:#fff;line-height:1.1;margin-bottom:25px;letter-spacing:-1px}
+        .hero-left h1 .green{color:#4ade80}
+        .hero-left p{font-size:1.05em;color:rgba(255,255,255,.65);line-height:1.85;margin-bottom:40px;max-width:420px}
+
+        .hero-actions{display:flex;flex-direction:column;gap:14px;max-width:360px}
+        .action-call{background:#4ade80;color:#111;padding:18px 32px;border-radius:8px;font-size:1.15em;font-weight:900;text-decoration:none;display:flex;align-items:center;justify-content:space-between;transition:all .2s}
+        .action-call:hover{background:#22c55e;transform:translateX(4px)}
+        .action-call .arrow{font-size:1.3em}
+        .action-info{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.8);padding:14px 22px;border-radius:8px;font-size:.9em;display:flex;align-items:center;gap:10px;text-decoration:none;transition:background .2s}
+        .action-info:hover{background:rgba(255,255,255,.12)}
+
+        .hero-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:35px}
+        .htag{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);padding:5px 14px;border-radius:20px;font-size:.78em}
+
+        /* 히어로 우측 - 이미지 콜라주 */
+        .hero-right{position:relative;overflow:hidden}
+        .hero-right img{width:100%;height:100%;object-fit:cover;filter:brightness(.7) contrast(1.1)}
+        .hero-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,0,0,.3),rgba(22,163,74,.15))}
+
+        /* 상태 카드 */
+        .status-card{position:absolute;bottom:40px;left:40px;background:rgba(255,255,255,.95);backdrop-filter:blur(20px);border-radius:12px;padding:20px 24px;box-shadow:0 8px 30px rgba(0,0,0,.2);min-width:220px}
+        .status-dot{width:10px;height:10px;background:#4ade80;border-radius:50%;display:inline-block;margin-right:8px;animation:pulse-dot 2s infinite}
+        @keyframes pulse-dot{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.4)}50%{box-shadow:0 0 0 8px rgba(74,222,128,0)}}
+        .status-title{font-size:.82em;color:#888;margin-bottom:6px}
+        .status-num{font-size:1.6em;font-weight:900;color:#111}
+        .status-sub{font-size:.75em;color:#888;margin-top:4px}
+
+        /* 숫자 섹션 */
+        .numbers{background:#f9fafb;padding:50px 20px;border-top:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0}
+        .numbers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0;max-width:900px;margin:0 auto}
+        .num-item{padding:25px 30px;text-align:center;border-right:1px solid #eee}
+        .num-item:last-child{border-right:none}
+        .num-n{font-size:2.8em;font-weight:900;color:#111;display:block;line-height:1}
+        .num-l{font-size:.82em;color:#888;margin-top:6px}
+
+        /* 서비스 - 가로 스크롤 카드 */
+        .svc-sec{padding:80px 20px;background:#fff}
+        .svc-sec-inner{max-width:1100px;margin:0 auto}
+        .sec-label{font-size:.75em;font-weight:700;color:#16a34a;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;display:block}
+        .sec-h{font-size:clamp(1.8em,3.5vw,2.5em);font-weight:900;color:#111;margin-bottom:10px;letter-spacing:-0.5px}
+        .sec-h span{color:#16a34a}
+        .sec-p{color:#888;font-size:.97em;line-height:1.7;margin-bottom:50px}
+        .svc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:#f0f0f0;border:1px solid #f0f0f0;border-radius:12px;overflow:hidden}
+        .svc-item{background:#fff;padding:32px 26px;transition:all .25s}
+        .svc-item:hover{background:#f9fafb}
+        .svc-num{font-size:.7em;font-weight:700;color:#bbb;letter-spacing:2px;margin-bottom:16px;display:block}
+        .svc-icon2{font-size:2.2em;margin-bottom:14px;display:block}
+        .svc-item h3{font-size:1em;font-weight:800;color:#111;margin-bottom:8px}
+        .svc-item p{font-size:.85em;color:#888;line-height:1.65}
+        .svc-item .tag2{display:inline-block;margin-top:12px;background:#f0fdf4;color:#16a34a;padding:3px 10px;border-radius:4px;font-size:.74em;font-weight:700}
+
+        /* 비포 애프터 */
+        .ba-sec{background:#111;padding:80px 20px;overflow:hidden}
+        .ba-inner{max-width:1100px;margin:0 auto}
+        .ba-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;border-radius:16px;overflow:hidden;margin-top:50px}
+        .ba-item{position:relative;overflow:hidden}
+        .ba-item img{width:100%;height:300px;object-fit:cover;display:block;transition:transform .5s}
+        .ba-item:hover img{transform:scale(1.04)}
+        .ba-tag{position:absolute;top:20px;left:20px;padding:6px 14px;border-radius:4px;font-size:.8em;font-weight:700}
+        .ba-tag.before{background:rgba(239,68,68,.9);color:#fff}
+        .ba-tag.after{background:rgba(74,222,128,.9);color:#111}
+        .ba-desc{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:20px;color:#fff;font-size:.88em;font-weight:600}
+
+        /* 갤러리 - 마소너리 느낌 */
+        .gal-sec{padding:80px 20px;background:#f9fafb}
+        .gal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:1100px;margin:50px auto 0}
+        .gal-item{border-radius:10px;overflow:hidden;position:relative;background:#eee}
+        .gal-item img{width:100%;height:200px;object-fit:cover;display:block;transition:transform .4s;filter:brightness(.95)}
+        .gal-item:first-child{grid-column:1/3;grid-row:1/3}
+        .gal-item:first-child img{height:412px}
+        .gal-item:hover img{transform:scale(1.05);filter:brightness(1.02)}
+        .gal-label2{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.7));padding:16px 14px;font-size:.83em;font-weight:700;color:#fff}
+
+        /* 프로세스 - 수평 */
+        .proc-sec{padding:80px 20px;background:#fff}
+        .proc-steps{display:flex;gap:0;max-width:1000px;margin:50px auto 0;position:relative}
+        .proc-steps::before{content:'';position:absolute;top:32px;left:5%;right:5%;height:1px;background:#e5e7eb;z-index:0}
+        .proc-s{flex:1;text-align:center;padding:0 15px;position:relative;z-index:1}
+        .proc-circle{width:65px;height:65px;background:#fff;border:2px solid #e5e7eb;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:1.2em;font-weight:900;color:#111;transition:all .3s;position:relative}
+        .proc-s:hover .proc-circle{background:#111;color:#4ade80;border-color:#111}
+        .proc-s h3{font-size:.92em;font-weight:800;color:#111;margin-bottom:7px}
+        .proc-s p{font-size:.8em;color:#888;line-height:1.6}
+
+        /* 지역 */
+        .area-sec{background:#111;padding:80px 20px}
+        .area-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:rgba(255,255,255,.08);border-radius:12px;overflow:hidden;max-width:950px;margin:50px auto 0}
+        .area-item{background:#111;padding:28px 22px;transition:background .2s}
+        .area-item:hover{background:#1a1a1a}
+        .area-item h3{font-size:1.05em;font-weight:900;color:#4ade80;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.08)}
+        .area-item p{font-size:.8em;color:rgba(255,255,255,.45);line-height:1.9}
+
+        /* CTA 풀스크린 */
+        .cta-full{min-height:60vh;background:#111;display:flex;align-items:center;justify-content:center;text-align:center;padding:80px 20px;position:relative;overflow:hidden}
+        .cta-full::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:800px;height:800px;background:radial-gradient(circle,rgba(74,222,128,.06),transparent 60%);border-radius:50%}
+        .cta-content{position:relative;z-index:1;max-width:700px}
+        .cta-full h2{font-size:clamp(2em,5vw,3.5em);font-weight:900;color:#fff;line-height:1.15;margin-bottom:20px;letter-spacing:-0.5px}
+        .cta-full h2 span{color:#4ade80}
+        .cta-full p{color:rgba(255,255,255,.6);font-size:1.05em;line-height:1.8;margin-bottom:45px}
+        .cta-btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+        .cta-green{background:#4ade80;color:#111;padding:20px 50px;border-radius:8px;font-size:1.2em;font-weight:900;text-decoration:none;transition:all .2s}
+        .cta-green:hover{background:#22c55e;transform:translateY(-2px)}
+        .cta-ghost2{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);padding:20px 35px;border-radius:8px;font-size:1em;font-weight:700;text-decoration:none;transition:all .2s}
+        .cta-ghost2:hover{border-color:rgba(255,255,255,.4);color:#fff}
+
+        footer{background:#0a0a0a;padding:30px 20px;text-align:center;color:rgba(255,255,255,.25);font-size:.82em;border-top:1px solid rgba(255,255,255,.05)}
+        footer span{color:#4ade80}
+
+        /* 플로팅 */
+        .float-call{position:fixed;bottom:28px;right:28px;z-index:9999}
+        .float-call a{background:#4ade80;color:#111;width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6em;text-decoration:none;box-shadow:0 6px 25px rgba(74,222,128,.5);animation:float-ani 3s ease-in-out infinite}
+        @keyframes float-ani{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+        @media(max-width:768px){
+            .hero{grid-template-columns:1fr;min-height:auto}
+            .hero-left{padding:50px 24px}
+            .hero-right{height:300px}
+            .ba-grid{grid-template-columns:1fr}
+            .gal-item:first-child{grid-column:1;grid-row:auto}
+            .gal-item:first-child img{height:200px}
+            .proc-steps{flex-direction:column;gap:20px}
+            .proc-steps::before{display:none}
+            nav{padding:15px 20px}
+            .numbers-grid .num-item{border-right:none;border-bottom:1px solid #eee}
+        }
+    </style>
+</head>
+<body>
+
+<div class="float-call">
+    <a href="tel:0504-1362-8100" title="긴급출동 전화">📞</a>
+</div>
+
+<!-- 상단 긴급 띠 -->
+<div class="top-bar">
+    <span>🔴 24시간 긴급출동 대기중</span>
+    <span class="sep">|</span>
+    <span>하수구 막힘 · 변기 역류 · 싱크대 막힘</span>
+    <span class="sep">|</span>
+    <a href="tel:0504-1362-8100">📞 지금 바로 전화 0504-1362-8100</a>
+</div>
+
+<!-- 네비 -->
+<nav>
+    <div class="nav-logo">💧 <span>Fox</span>Hasu</div>
+    <a href="tel:0504-1362-8100" class="nav-call">📞 긴급출동 전화하기</a>
+</nav>
+
+<!-- 히어로 -->
+<section class="hero">
+    <div class="hero-left">
+        <div class="hero-eyebrow">🔴 LIVE · 서울·인천·경기 출동 대기중</div>
+        <h1>
+            막힌 배관<br>
+            <span class="green">지금 바로</span><br>
+            해결합니다
+        </h1>
+        <p>하수구·변기·싱크대·배수관 막힘<br>내시경 정밀 진단 후 고압세척으로<br>당일 완벽 해결해드립니다</p>
+        <div class="hero-actions">
+            <a href="tel:0504-1362-8100" class="action-call">
+                <span>📞 0504-1362-8100 긴급출동</span>
+                <span class="arrow">→</span>
+            </a>
+            <a href="#services" class="action-info">
+                <span>🔍</span>
+                <span>서비스 안내 보기</span>
+            </a>
+        </div>
+        <div class="hero-tags">
+            <span class="htag">서울 전 지역</span>
+            <span class="htag">인천 전 지역</span>
+            <span class="htag">경기 전 지역</span>
+            <span class="htag">30분 출동</span>
+            <span class="htag">내시경 무료</span>
+            <span class="htag">당일 해결</span>
+        </div>
+    </div>
+    <div class="hero-right">
+        <img src="https://loremflickr.com/900/800/plumbing,pipe?random=99" alt="배관 전문 작업">
+        <div class="hero-overlay"></div>
+        <div class="status-card">
+            <div class="status-title"><span class="status-dot"></span>현재 출동 현황</div>
+            <div class="status-num">24H 대기중</div>
+            <div class="status-sub">서울·인천·경기 전 지역 즉시 출동 가능</div>
+        </div>
+    </div>
+</section>
+
+<!-- 숫자 -->
+<div class="numbers">
+    <div class="numbers-grid">
+        <div class="num-item"><span class="num-n">30분</span><div class="num-l">평균 출동 시간</div></div>
+        <div class="num-item"><span class="num-n">98%</span><div class="num-l">당일 해결률</div></div>
+        <div class="num-item"><span class="num-n">무료</span><div class="num-l">내시경 진단</div></div>
+        <div class="num-item"><span class="num-n">0원</span><div class="num-l">추가비용 없음</div></div>
+        <div class="num-item"><span class="num-n">24H</span><div class="num-l">365일 대기</div></div>
+    </div>
+</div>
+
+<!-- 서비스 -->
+<section class="svc-sec" id="services">
+    <div class="svc-sec-inner">
+        <span class="sec-label">SERVICES</span>
+        <h2 class="sec-h">전문 <span>배관 서비스</span></h2>
+        <p class="sec-p">모든 배관 문제 당일 해결 — 내시경 진단 후 정확한 공법 적용</p>
+        <div class="svc-grid">
+            <div class="svc-item"><span class="svc-num">01</span><span class="svc-icon2">🚽</span><h3>변기 막힘·역류</h3><p>이물질·요석·물티슈 완전 제거</p><span class="tag2">긴급 가능</span></div>
+            <div class="svc-item"><span class="svc-num">02</span><span class="svc-icon2">🍽️</span><h3>싱크대·주방 배수</h3><p>기름 슬러지 고압세척으로 완전 제거</p><span class="tag2">당일 완료</span></div>
+            <div class="svc-item"><span class="svc-num">03</span><span class="svc-icon2">🚿</span><h3>하수구·배수구</h3><p>역류·악취 원인 파악 후 완벽 처리</p><span class="tag2">즉시 출동</span></div>
+            <div class="svc-item"><span class="svc-num">04</span><span class="svc-icon2">🔍</span><h3>누수 탐지·보수</h3><p>정밀 장비로 누수 위치 정확히 파악</p><span class="tag2">전문 진단</span></div>
+            <div class="svc-item"><span class="svc-num">05</span><span class="svc-icon2">💨</span><h3>고압세척·스케일링</h3><p>노후 배관 내부 스케일 완전 제거</p><span class="tag2">근본 해결</span></div>
+            <div class="svc-item"><span class="svc-num">06</span><span class="svc-icon2">🏢</span><h3>건물·상가 메인배관</h3><p>공용배관 전문 고압세척 처리</p><span class="tag2">대형 가능</span></div>
+        </div>
+    </div>
+</section>
+
+<!-- 비포 애프터 -->
+<section class="ba-sec">
+    <div class="ba-inner">
+        <span class="sec-label" style="color:#4ade80">BEFORE & AFTER</span>
+        <h2 class="sec-h" style="color:#fff">작업 전·후 <span style="color:#4ade80">비교</span></h2>
+        <div class="ba-grid">
+            <div class="ba-item">
+                <img src="https://loremflickr.com/700/300/dirty,pipe?random=11" alt="작업 전">
+                <div class="ba-tag before">BEFORE</div>
+                <div class="ba-desc">막히고 역류하던 배관 — 슬러지·기름때 가득</div>
+            </div>
+            <div class="ba-item">
+                <img src="https://loremflickr.com/700/300/clean,pipe?random=22" alt="작업 후">
+                <div class="ba-tag after">AFTER</div>
+                <div class="ba-desc">고압세척 완료 — 새 배관처럼 깨끗하게 복원</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 갤러리 -->
+<section class="gal-sec">
+    <div style="max-width:1100px;margin:0 auto">
+        <span class="sec-label">GALLERY</span>
+        <h2 class="sec-h">실제 <span>현장 사진</span></h2>
+    </div>
+    <div class="gal-grid">
+        <div class="gal-item"><img src="https://loremflickr.com/800/412/plumbing,drain?random=33" alt="배관 내시경 진단"><div class="gal-label2">🔍 배관 내시경 정밀 진단</div></div>
+        <div class="gal-item"><img src="https://loremflickr.com/400/200/pipe,water?random=44" alt="고압세척"><div class="gal-label2">💨 고압세척</div></div>
+        <div class="gal-item"><img src="https://loremflickr.com/400/200/drain,repair?random=55" alt="스케일링"><div class="gal-label2">🔧 스케일링</div></div>
+        <div class="gal-item"><img src="https://loremflickr.com/400/200/bathroom,drain?random=66" alt="욕실 복원"><div class="gal-label2">🚿 욕실 복원</div></div>
+        <div class="gal-item"><img src="https://loremflickr.com/400/200/kitchen,sink?random=77" alt="싱크대 해결"><div class="gal-label2">🍽️ 싱크대 해결</div></div>
+        <div class="gal-item"><img src="https://loremflickr.com/400/200/sewage,clean?random=88" alt="하수관 복원"><div class="gal-label2">✅ 복원 완료</div></div>
+        <div class="gal-item"><img src="https://loremflickr.com/400/200/water,leak?random=99" alt="누수탐지"><div class="gal-label2">💧 누수탐지</div></div>
+    </div>
+</section>
+
+<!-- 프로세스 -->
+<section class="proc-sec">
+    <div style="max-width:1100px;margin:0 auto;text-align:center">
+        <span class="sec-label">HOW IT WORKS</span>
+        <h2 class="sec-h">출동 <span>프로세스</span></h2>
+        <p class="sec-p">전화 한 통으로 끝 — 5단계 완벽 해결</p>
+    </div>
+    <div class="proc-steps">
+        <div class="proc-s"><div class="proc-circle">1</div><h3>전화 접수</h3><p>증상 설명 후 즉시 접수</p></div>
+        <div class="proc-s"><div class="proc-circle">2</div><h3>30분 출동</h3><p>가장 가까운 기술자 배차</p></div>
+        <div class="proc-s"><div class="proc-circle">3</div><h3>내시경 진단</h3><p>원인 정확히 파악</p></div>
+        <div class="proc-s"><div class="proc-circle">4</div><h3>고압세척</h3><p>플렉스샤프트로 완전 제거</p></div>
+        <div class="proc-s"><div class="proc-circle">5</div><h3>완료 확인</h3><p>재내시경으로 직접 확인</p></div>
+    </div>
+</section>
+
+<!-- 지역 -->
+<section class="area-sec">
+    <div style="max-width:1100px;margin:0 auto">
+        <span class="sec-label" style="color:#4ade80">SERVICE AREA</span>
+        <h2 class="sec-h" style="color:#fff">출동 <span style="color:#4ade80">가능 지역</span></h2>
+    </div>
+    <div class="area-grid2">
+        <div class="area-item"><h3>서울</h3><p>강남 서초 송파 강동 강서 마포 종로 중구 용산 성동 광진 동대문 성북 강북 노원 은평 양천 구로 영등포 동작 관악</p></div>
+        <div class="area-item"><h3>경기</h3><p>수원 성남 분당 용인 안양 부천 광명 평택 안산 고양 일산 의정부 파주 김포 하남 남양주 구리 광주 이천</p></div>
+        <div class="area-item"><h3>인천</h3><p>중구 동구 미추홀 연수 남동 부평 계양 서구 강화 송도 청라 검단</p></div>
+        <div class="area-item"><h3>전국</h3><p>위 지역 외에도 전국 어디든 출동 가능합니다. 거리에 따라 확인 후 안내드립니다.</p></div>
+    </div>
+</section>
+
+<!-- CTA 풀스크린 -->
+<section class="cta-full">
+    <div class="cta-content">
+        <h2>막힌 배관<br><span>지금 해결하세요</span></h2>
+        <p>방치할수록 아랫집 누수로 번집니다<br>30분 내 출동 · 내시경 무료 · 당일 완벽 해결</p>
+        <div class="cta-btns">
+            <a href="tel:0504-1362-8100" class="cta-green">📞 0504-1362-8100 긴급출동</a>
+            <a href="#services" class="cta-ghost2">서비스 안내 ↓</a>
+        </div>
+        <p style="margin-top:25px;font-size:.85em;color:rgba(255,255,255,.35)">24시간 365일 · 서울 인천 경기 전국 · 추가비용 없음</p>
+    </div>
+</section>
+
+<footer>
+    <p>FoxHasu 하수구 배관 전문 · 서울 인천 경기 전국</p>
+    <p style="margin-top:8px">24시간 긴급출동: <span>0504-1362-8100</span></p>
+</footer>
+
+</body>
+</html>
