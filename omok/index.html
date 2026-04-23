@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오목 온라인 · Omok Online</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:radial-gradient(ellipse at top,#1e2749 0%,#0d1128 70%,#05060f 100%);font-family:'Malgun Gothic','Segoe UI',sans-serif;color:#fff;overflow:hidden}
+body{display:flex;justify-content:center;align-items:center;padding:20px}
+.screen{max-width:720px;width:100%;padding:36px;background:rgba(20,25,50,0.65);border:1px solid rgba(120,140,200,0.25);border-radius:24px;backdrop-filter:blur(12px);box-shadow:0 25px 70px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.1);animation:fadein 0.4s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.screen.hidden{display:none}
+h1{font-size:46px;text-align:center;margin-bottom:14px;background:linear-gradient(90deg,#ffd93d,#ff8a5c,#ff5c9c);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;letter-spacing:-1px}
+.subtitle{text-align:center;color:#a8b2d1;margin-bottom:32px;font-size:15px}
+button{background:linear-gradient(135deg,#6670f7,#8b40c0);border:none;color:#fff;padding:15px 30px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin:6px;transition:all 0.18s;font-family:inherit;box-shadow:0 6px 20px rgba(100,80,200,0.3)}
+button:hover{transform:translateY(-3px);box-shadow:0 10px 25px rgba(120,100,220,0.5)}
+button:active{transform:translateY(-1px)}
+button.secondary{background:linear-gradient(135deg,#444,#666)}
+button.danger{background:linear-gradient(135deg,#c03850,#901a30)}
+button.big{padding:20px 40px;font-size:18px;width:100%;max-width:280px}
+.btn-row{display:flex;flex-direction:column;gap:10px;align-items:center}
+.code-display{font-size:52px;font-weight:900;letter-spacing:12px;text-align:center;background:linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02));padding:24px;border-radius:14px;margin:20px 0;font-family:'Consolas','Courier New',monospace;border:2px dashed rgba(255,217,61,0.3);color:#ffd93d;text-shadow:0 0 20px rgba(255,217,61,0.4)}
+input[type="text"]{font-size:28px;padding:16px 22px;border:2px solid rgba(120,140,200,0.4);background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-family:'Consolas',monospace;letter-spacing:8px;text-transform:uppercase;width:100%;max-width:320px;font-weight:bold;outline:none}
+input[type="text"]:focus{border-color:#ffd93d;box-shadow:0 0 0 3px rgba(255,217,61,0.2)}
+#board-container{display:flex;flex-direction:column;align-items:center;gap:14px}
+canvas{background:#d4a060;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.7),inset 0 0 40px rgba(101,67,33,0.2);max-width:min(600px,90vw);max-height:75vh;cursor:crosshair;display:block;touch-action:none}
+.status-bar{display:flex;gap:14px;font-size:16px;padding:12px 22px;background:rgba(0,0,0,0.55);border-radius:12px;width:100%;max-width:600px;justify-content:space-between;font-weight:600;border:1px solid rgba(120,140,200,0.2)}
+.pill{padding:6px 14px;border-radius:20px;background:rgba(255,255,255,0.08)}
+.pill.mine{background:linear-gradient(90deg,rgba(255,217,61,0.2),rgba(255,138,92,0.2));color:#ffd93d;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:0.65}}
+.stone{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:middle;margin-right:4px}
+.stone.black{background:radial-gradient(circle at 35% 35%,#888,#000)}
+.stone.white{background:radial-gradient(circle at 35% 35%,#fff,#aaa);box-shadow:inset 0 0 0 1px #888}
+.blink{animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:0.3}}
+.hint{font-size:13px;color:#8a9aba;text-align:center;margin-top:10px}
+#toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(20,25,50,0.95);border:1px solid rgba(120,140,200,0.4);padding:14px 24px;border-radius:10px;color:#fff;font-weight:600;z-index:1000;opacity:0;transition:opacity 0.3s;pointer-events:none}
+#toast.show{opacity:1}
+.winner-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:999;opacity:0;pointer-events:none;transition:opacity 0.4s}
+.winner-overlay.show{opacity:1;pointer-events:auto}
+.winner-text{font-size:64px;font-weight:900;margin-bottom:30px;background:linear-gradient(90deg,#ffd93d,#ff8a5c);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:zoom 0.5s ease-out}
+@keyframes zoom{from{transform:scale(0.3)}to{transform:scale(1)}}
+.badge{display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);padding:3px 10px;border-radius:8px;font-size:11px;font-weight:bold;margin-left:6px;vertical-align:middle}
+.back-home{position:fixed;top:15px;left:15px;color:#8a9aba;text-decoration:none;font-size:14px;opacity:0.7}
+.back-home:hover{opacity:1}
+</style>
+</head>
+<body>
+<a href="/" class="back-home">← 홈으로</a>
+
+<div id="menu" class="screen">
+  <h1>오목 온라인</h1>
+  <p class="subtitle">⚫ ⚪ 5개를 먼저 연결하는 사람이 승리! · 친구와 실시간 대결</p>
+  <div class="btn-row">
+    <button class="big" onclick="showCreate()">🎮 방 만들기</button>
+    <button class="big secondary" onclick="showJoin()">🚪 방 참가하기</button>
+  </div>
+  <p class="hint">방을 만들면 6자리 코드가 생성됩니다.<br>친구에게 코드를 공유하면 바로 함께 플레이할 수 있어요.</p>
+</div>
+
+<div id="create" class="screen hidden">
+  <h1>방 만들기</h1>
+  <p class="subtitle">친구에게 이 코드를 알려주세요</p>
+  <div class="code-display" id="roomCode">------</div>
+  <div class="btn-row">
+    <button onclick="copyCode()">📋 코드 복사</button>
+    <p style="text-align:center;margin:20px 0" id="createStatus" class="blink">● 연결 대기 중...</p>
+    <button class="secondary" onclick="backToMenu()">← 돌아가기</button>
+  </div>
+</div>
+
+<div id="join" class="screen hidden">
+  <h1>방 참가</h1>
+  <p class="subtitle">6자리 방 코드를 입력하세요</p>
+  <div style="text-align:center;margin:20px 0">
+    <input type="text" id="codeInput" maxlength="6" placeholder="ABCDEF" autocomplete="off" />
+  </div>
+  <div class="btn-row">
+    <button class="big" onclick="doJoin()">✅ 참가하기</button>
+    <p id="joinStatus" style="text-align:center;margin:12px 0;min-height:20px"></p>
+    <button class="secondary" onclick="backToMenu()">← 돌아가기</button>
+  </div>
+</div>
+
+<div id="game" class="screen hidden" style="padding:20px">
+  <div id="board-container">
+    <div class="status-bar">
+      <div>
+        <span id="myColorLabel">-</span>
+        <span class="badge">나</span>
+      </div>
+      <div id="turnLabel" class="pill">대기 중...</div>
+      <div>
+        <span id="oppColorLabel">-</span>
+        <span class="badge" style="background:linear-gradient(135deg,#888,#555)">상대</span>
+      </div>
+    </div>
+    <canvas id="board" width="600" height="600"></canvas>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+      <button onclick="requestReset()">🔄 재경기</button>
+      <button class="danger" onclick="leaveGame()">🚪 나가기</button>
+    </div>
+    <p class="hint" id="connStatus">✓ 연결됨</p>
+  </div>
+</div>
+
+<div id="winnerOverlay" class="winner-overlay">
+  <div class="winner-text" id="winnerText">승리!</div>
+  <div class="btn-row">
+    <button onclick="closeWinner()">확인</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// ==================== CONFIG ====================
+const GAME_PREFIX='seoro-omok-v1';
+const BOARD_SIZE=15;
+const CANVAS_SIZE=600;
+const MARGIN=26;
+const CELL=(CANVAS_SIZE-MARGIN*2)/(BOARD_SIZE-1);
+
+// ==================== STATE ====================
+let peer=null,conn=null,isHost=false;
+let board,currentPlayer,myColor=null,winner=0,lastMove=null,hoverCell=null;
+let resetRequested=false;
+
+const cv=document.getElementById('board'),ctx=cv.getContext('2d');
+
+// ==================== UI ====================
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+function toast(msg,dur=2000){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>t.classList.remove('show'),dur);
+}
+function generateCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c='';for(let i=0;i<6;i++)c+=chars[Math.floor(Math.random()*chars.length)];
+  return c;
+}
+
+// ==================== CONNECTION ====================
+function showCreate(){
+  showScreen('create');
+  isHost=true;
+  tryCreate();
+}
+function tryCreate(){
+  const code=generateCode();
+  document.getElementById('roomCode').textContent=code;
+  if(peer)peer.destroy();
+  peer=new Peer(GAME_PREFIX+'-'+code,{debug:0});
+  peer.on('open',id=>{
+    document.getElementById('createStatus').innerHTML='<span class="blink">● 연결 대기 중... (친구가 코드를 입력하면 자동으로 시작됩니다)</span>';
+  });
+  peer.on('connection',c=>{
+    conn=c;
+    setupConnection();
+    myColor=1;
+    conn.on('open',()=>{
+      conn.send({type:'hello',hostColor:1});
+      startGame();
+      toast('상대방이 참가했습니다!');
+    });
+  });
+  peer.on('error',err=>{
+    if(err.type==='unavailable-id'){
+      tryCreate();
+    } else {
+      document.getElementById('createStatus').innerHTML='<span style="color:#f66">⚠ 연결 오류: '+err.type+'</span>';
+    }
+  });
+}
+function showJoin(){
+  showScreen('join');
+  document.getElementById('codeInput').value='';
+  document.getElementById('joinStatus').textContent='';
+  setTimeout(()=>document.getElementById('codeInput').focus(),100);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter' && !document.getElementById('join').classList.contains('hidden')){
+    doJoin();
+  }
+});
+function doJoin(){
+  const code=document.getElementById('codeInput').value.toUpperCase().trim();
+  if(code.length!==6){
+    document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 코드는 6자리여야 합니다</span>';
+    return;
+  }
+  isHost=false;
+  document.getElementById('joinStatus').innerHTML='<span class="blink">⏳ 연결 중...</span>';
+  if(peer)peer.destroy();
+  peer=new Peer({debug:0});
+  peer.on('open',()=>{
+    conn=peer.connect(GAME_PREFIX+'-'+code,{reliable:true});
+    const timer=setTimeout(()=>{
+      if(!conn.open){
+        document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 방을 찾을 수 없습니다. 코드를 확인해주세요.</span>';
+        conn.close();
+      }
+    },6000);
+    conn.on('open',()=>{
+      clearTimeout(timer);
+      setupConnection();
+      myColor=2;
+      startGame();
+      toast('연결되었습니다!');
+    });
+    conn.on('error',()=>{
+      clearTimeout(timer);
+      document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 연결 실패</span>';
+    });
+  });
+  peer.on('error',err=>{
+    document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 오류: '+err.type+'</span>';
+  });
+}
+function setupConnection(){
+  conn.on('data',handleMsg);
+  conn.on('close',()=>{
+    toast('상대방의 연결이 끊어졌습니다',4000);
+    document.getElementById('connStatus').innerHTML='<span style="color:#f66">⚠ 연결 끊김</span>';
+  });
+  conn.on('error',()=>{
+    document.getElementById('connStatus').innerHTML='<span style="color:#f66">⚠ 연결 오류</span>';
+  });
+}
+function sendMsg(data){
+  if(conn&&conn.open)conn.send(data);
+}
+function handleMsg(data){
+  if(data.type==='move'){
+    placeStone(data.x,data.y,currentPlayer,false);
+  } else if(data.type==='resetReq'){
+    if(confirm('상대방이 재경기를 요청했습니다. 수락하시겠습니까?')){
+      sendMsg({type:'resetAck',accept:true});
+      resetGame();
+    } else {
+      sendMsg({type:'resetAck',accept:false});
+    }
+  } else if(data.type==='resetAck'){
+    if(data.accept){
+      resetGame();
+      toast('재경기 시작!');
+    } else {
+      toast('상대방이 거절했습니다');
+    }
+  } else if(data.type==='hello'){
+    // Host confirmed connection
+  }
+}
+
+// ==================== GAME LOGIC ====================
+function startGame(){
+  showScreen('game');
+  board=Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill(0));
+  currentPlayer=1;
+  winner=0;
+  lastMove=null;
+  hoverCell=null;
+  updateStatus();
+  draw();
+}
+function resetGame(){
+  board=Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill(0));
+  currentPlayer=1;
+  winner=0;
+  lastMove=null;
+  document.getElementById('winnerOverlay').classList.remove('show');
+  updateStatus();
+  draw();
+}
+function requestReset(){
+  if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
+  sendMsg({type:'resetReq'});
+  toast('재경기 요청을 보냈습니다');
+}
+function leaveGame(){
+  if(confirm('게임을 나가시겠습니까?'))backToMenu();
+}
+function backToMenu(){
+  if(conn){try{conn.close();}catch(e){}conn=null;}
+  if(peer){peer.destroy();peer=null;}
+  showScreen('menu');
+  document.getElementById('winnerOverlay').classList.remove('show');
+}
+function copyCode(){
+  const code=document.getElementById('roomCode').textContent;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(code).then(()=>toast('복사됨: '+code));
+  } else {
+    toast('코드: '+code);
+  }
+}
+function placeStone(x,y,color,isMine){
+  if(board[y][x]!==0||winner)return;
+  board[y][x]=color;
+  lastMove={x,y,color};
+  if(checkWin(x,y,color)){
+    winner=color;
+    setTimeout(showWinner,300);
+  } else {
+    currentPlayer=currentPlayer===1?2:1;
+  }
+  updateStatus();
+  draw();
+  if(isMine)sendMsg({type:'move',x,y});
+}
+function checkWin(x,y,color){
+  const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+  for(const[dx,dy]of dirs){
+    let count=1;
+    for(let i=1;i<6;i++){
+      const nx=x+dx*i,ny=y+dy*i;
+      if(nx<0||nx>=BOARD_SIZE||ny<0||ny>=BOARD_SIZE)break;
+      if(board[ny][nx]!==color)break;
+      count++;
+    }
+    for(let i=1;i<6;i++){
+      const nx=x-dx*i,ny=y-dy*i;
+      if(nx<0||nx>=BOARD_SIZE||ny<0||ny>=BOARD_SIZE)break;
+      if(board[ny][nx]!==color)break;
+      count++;
+    }
+    if(count>=5)return true;
+  }
+  return false;
+}
+function showWinner(){
+  const o=document.getElementById('winnerOverlay');
+  const t=document.getElementById('winnerText');
+  t.textContent=winner===myColor?'🎉 승리!':'😭 패배';
+  o.classList.add('show');
+}
+function closeWinner(){
+  document.getElementById('winnerOverlay').classList.remove('show');
+}
+function updateStatus(){
+  const my=document.getElementById('myColorLabel');
+  const opp=document.getElementById('oppColorLabel');
+  my.innerHTML=(myColor===1?'<span class="stone black"></span> 흑':'<span class="stone white"></span> 백');
+  opp.innerHTML=(myColor===1?'<span class="stone white"></span> 백':'<span class="stone black"></span> 흑');
+  const turnLabel=document.getElementById('turnLabel');
+  if(winner){
+    turnLabel.textContent=winner===myColor?'🎉 승리!':'😭 패배';
+    turnLabel.className='pill';
+  } else {
+    const isMine=currentPlayer===myColor;
+    turnLabel.innerHTML=(currentPlayer===1?'<span class="stone black"></span> 흑':'<span class="stone white"></span> 백')+' 차례'+(isMine?' · 내 차례!':' · 상대 차례');
+    turnLabel.className=isMine?'pill mine':'pill';
+  }
+}
+
+// ==================== DRAWING ====================
+let woodTextureCache=null;
+function drawWoodTexture(){
+  if(woodTextureCache)return woodTextureCache;
+  const c=document.createElement('canvas');
+  c.width=CANVAS_SIZE;c.height=CANVAS_SIZE;
+  const cx=c.getContext('2d');
+  const grd=cx.createLinearGradient(0,0,CANVAS_SIZE,CANVAS_SIZE);
+  grd.addColorStop(0,'#e4b070');
+  grd.addColorStop(0.5,'#d09a5d');
+  grd.addColorStop(1,'#b8844a');
+  cx.fillStyle=grd;cx.fillRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
+  // Wood grain
+  for(let i=0;i<50;i++){
+    cx.strokeStyle='rgba(101,67,33,'+(0.06+Math.random()*0.1)+')';
+    cx.lineWidth=1+Math.random()*2;
+    cx.beginPath();
+    const startY=Math.random()*CANVAS_SIZE;
+    cx.moveTo(0,startY);
+    cx.bezierCurveTo(
+      CANVAS_SIZE*0.3,startY+(Math.random()-0.5)*40,
+      CANVAS_SIZE*0.7,startY+(Math.random()-0.5)*40,
+      CANVAS_SIZE,startY+(Math.random()-0.5)*40);
+    cx.stroke();
+  }
+  // Knots
+  for(let i=0;i<4;i++){
+    const x=Math.random()*CANVAS_SIZE,y=Math.random()*CANVAS_SIZE;
+    const rg=cx.createRadialGradient(x,y,2,x,y,15);
+    rg.addColorStop(0,'rgba(80,50,20,0.5)');
+    rg.addColorStop(1,'rgba(80,50,20,0)');
+    cx.fillStyle=rg;cx.beginPath();cx.arc(x,y,15,0,Math.PI*2);cx.fill();
+  }
+  woodTextureCache=c;
+  return c;
+}
+function draw(){
+  ctx.clearRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
+  ctx.drawImage(drawWoodTexture(),0,0);
+  // Grid
+  ctx.strokeStyle='rgba(40,20,5,0.85)';
+  ctx.lineWidth=1.2;
+  for(let i=0;i<BOARD_SIZE;i++){
+    const p=MARGIN+i*CELL;
+    ctx.beginPath();ctx.moveTo(MARGIN,p);ctx.lineTo(MARGIN+(BOARD_SIZE-1)*CELL,p);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p,MARGIN);ctx.lineTo(p,MARGIN+(BOARD_SIZE-1)*CELL);ctx.stroke();
+  }
+  // Border
+  ctx.lineWidth=2.5;
+  ctx.strokeRect(MARGIN,MARGIN,(BOARD_SIZE-1)*CELL,(BOARD_SIZE-1)*CELL);
+  ctx.lineWidth=1.2;
+  // Star points
+  const stars=[[3,3],[3,11],[11,3],[11,11],[7,7]];
+  ctx.fillStyle='#2a1a08';
+  for(const[x,y]of stars){
+    ctx.beginPath();
+    ctx.arc(MARGIN+x*CELL,MARGIN+y*CELL,4,0,Math.PI*2);
+    ctx.fill();
+  }
+  // Coordinates
+  ctx.fillStyle='rgba(60,40,20,0.6)';
+  ctx.font='bold 11px monospace';
+  ctx.textAlign='center';
+  for(let i=0;i<BOARD_SIZE;i++){
+    const letter=String.fromCharCode(65+i);
+    ctx.fillText(letter,MARGIN+i*CELL,MARGIN-10);
+    ctx.fillText(String(i+1),MARGIN-15,MARGIN+i*CELL+4);
+  }
+  // Stones
+  for(let y=0;y<BOARD_SIZE;y++){
+    for(let x=0;x<BOARD_SIZE;x++){
+      if(board[y][x])drawStone(x,y,board[y][x]);
+    }
+  }
+  // Last move marker
+  if(lastMove){
+    const cx=MARGIN+lastMove.x*CELL;
+    const cy=MARGIN+lastMove.y*CELL;
+    ctx.strokeStyle=lastMove.color===1?'#f55':'#e22';
+    ctx.lineWidth=2.5;
+    ctx.beginPath();
+    ctx.arc(cx,cy,4,0,Math.PI*2);
+    ctx.stroke();
+    ctx.fillStyle=lastMove.color===1?'#f55':'#e22';
+    ctx.beginPath();
+    ctx.arc(cx,cy,2,0,Math.PI*2);
+    ctx.fill();
+  }
+  // Hover preview
+  if(hoverCell&&!winner&&currentPlayer===myColor&&board[hoverCell.y][hoverCell.x]===0){
+    ctx.globalAlpha=0.45;
+    drawStone(hoverCell.x,hoverCell.y,myColor);
+    ctx.globalAlpha=1;
+  }
+}
+function drawStone(x,y,color){
+  const cx=MARGIN+x*CELL;
+  const cy=MARGIN+y*CELL;
+  const r=CELL/2-2;
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.arc(cx+2,cy+3,r,0,Math.PI*2);
+  ctx.fill();
+  // Gradient
+  const grd=ctx.createRadialGradient(cx-r*0.35,cy-r*0.35,r*0.1,cx,cy,r);
+  if(color===1){
+    grd.addColorStop(0,'#5a5a5a');
+    grd.addColorStop(0.5,'#222');
+    grd.addColorStop(1,'#000');
+  } else {
+    grd.addColorStop(0,'#fff');
+    grd.addColorStop(0.7,'#e8e8e8');
+    grd.addColorStop(1,'#b8b8b8');
+  }
+  ctx.fillStyle=grd;
+  ctx.beginPath();
+  ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fill();
+  // Outline for white stones
+  if(color===2){
+    ctx.strokeStyle='rgba(100,80,40,0.4)';
+    ctx.lineWidth=1;
+    ctx.stroke();
+  }
+  // Highlight
+  ctx.fillStyle=color===1?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.7)';
+  ctx.beginPath();
+  ctx.arc(cx-r*0.35,cy-r*0.35,r*0.3,0,Math.PI*2);
+  ctx.fill();
+}
+
+// ==================== INPUT ====================
+function canvasCoords(e){
+  const rect=cv.getBoundingClientRect();
+  const evt=e.touches?e.touches[0]:e;
+  const mx=(evt.clientX-rect.left)*cv.width/rect.width;
+  const my=(evt.clientY-rect.top)*cv.height/rect.height;
+  return{mx,my};
+}
+function pixelToCell(mx,my){
+  const x=Math.round((mx-MARGIN)/CELL);
+  const y=Math.round((my-MARGIN)/CELL);
+  if(x<0||x>=BOARD_SIZE||y<0||y>=BOARD_SIZE)return null;
+  return{x,y};
+}
+cv.addEventListener('mousemove',e=>{
+  const{mx,my}=canvasCoords(e);
+  hoverCell=pixelToCell(mx,my);
+  draw();
+});
+cv.addEventListener('mouseleave',()=>{
+  hoverCell=null;draw();
+});
+cv.addEventListener('click',e=>{
+  if(winner)return;
+  if(currentPlayer!==myColor){toast('상대 차례입니다');return;}
+  const{mx,my}=canvasCoords(e);
+  const pos=pixelToCell(mx,my);
+  if(!pos)return;
+  if(board[pos.y][pos.x]!==0){toast('이미 돌이 있습니다');return;}
+  placeStone(pos.x,pos.y,myColor,true);
+});
+cv.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(winner)return;
+  if(currentPlayer!==myColor)return;
+  const{mx,my}=canvasCoords(e);
+  const pos=pixelToCell(mx,my);
+  if(!pos)return;
+  if(board[pos.y][pos.x]!==0)return;
+  placeStone(pos.x,pos.y,myColor,true);
+},{passive:false});
+
+// Initialize with blank board for preview
+board=Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill(0));
+draw();
+</script>
+</body>
+</html>
