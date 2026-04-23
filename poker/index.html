@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>포커 온라인 · Texas Hold'em</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:radial-gradient(ellipse at top,#2a1e3e 0%,#160a24 70%,#08040e 100%);font-family:'Malgun Gothic','Segoe UI',sans-serif;color:#fff;overflow:hidden}
+body{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:10px}
+.screen{max-width:920px;width:100%;padding:30px;background:rgba(20,15,35,0.75);border:1px solid rgba(180,120,220,0.25);border-radius:24px;backdrop-filter:blur(12px);box-shadow:0 25px 70px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.08);animation:fadein 0.4s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.screen.hidden{display:none}
+h1{font-size:44px;text-align:center;margin-bottom:14px;background:linear-gradient(90deg,#ff6a9c,#d46aff,#6aa8ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;letter-spacing:-1px}
+.subtitle{text-align:center;color:#c0a0d8;margin-bottom:32px;font-size:15px}
+button{background:linear-gradient(135deg,#8a3dd4,#4a1d90);border:none;color:#fff;padding:14px 26px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin:4px;transition:all 0.18s;font-family:inherit;box-shadow:0 6px 20px rgba(100,40,180,0.35)}
+button:hover:not(:disabled){transform:translateY(-3px);box-shadow:0 10px 25px rgba(140,60,220,0.5)}
+button:disabled{opacity:0.35;cursor:not-allowed}
+button.secondary{background:linear-gradient(135deg,#444,#666)}
+button.danger{background:linear-gradient(135deg,#c03850,#901a30)}
+button.big{padding:18px 36px;font-size:17px;width:100%;max-width:280px}
+button.action{min-width:90px;padding:12px 18px}
+button.action.fold{background:linear-gradient(135deg,#c03850,#701828)}
+button.action.check,button.action.call{background:linear-gradient(135deg,#3a8a5a,#1e5a3a)}
+button.action.raise{background:linear-gradient(135deg,#d4902a,#8a5a1a)}
+button.action.allin{background:linear-gradient(135deg,#c22050,#801828);font-weight:900}
+.btn-row{display:flex;flex-direction:column;gap:10px;align-items:center}
+.code-display{font-size:50px;font-weight:900;letter-spacing:12px;text-align:center;background:rgba(255,255,255,0.05);padding:22px;border-radius:14px;margin:20px 0;font-family:'Consolas','Courier New',monospace;border:2px dashed rgba(212,106,255,0.3);color:#d46aff;text-shadow:0 0 20px rgba(212,106,255,0.4)}
+input[type="text"]{font-size:28px;padding:16px 22px;border:2px solid rgba(180,120,220,0.4);background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-family:'Consolas',monospace;letter-spacing:8px;text-transform:uppercase;width:100%;max-width:320px;font-weight:bold;outline:none}
+input[type="text"]:focus{border-color:#d46aff;box-shadow:0 0 0 3px rgba(212,106,255,0.2)}
+#game{max-width:760px;padding:18px}
+
+.poker-table{background:radial-gradient(ellipse at center,#2a7a4a 0%,#1a4a2a 70%,#0d2818 100%);border-radius:220px;padding:24px;margin:10px 0;border:10px solid #4a2810;box-shadow:0 0 0 4px #8b5a2b,inset 0 0 40px rgba(0,0,0,0.5),0 25px 50px rgba(0,0,0,0.6);min-height:400px;position:relative}
+.player-area{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 20px;border-radius:14px;background:rgba(0,0,0,0.35);border:2px solid transparent;transition:border-color 0.3s}
+.player-area.active{border-color:#ffd93d;box-shadow:0 0 25px rgba(255,217,61,0.4)}
+.player-area.folded{opacity:0.4}
+.player-info{display:flex;gap:16px;align-items:center}
+.player-info .avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#8a3dd4,#4a1d90);display:flex;justify-content:center;align-items:center;font-size:20px;font-weight:900}
+.player-info .avatar.opp{background:linear-gradient(135deg,#3da8d4,#1d5a90)}
+.player-info .details{display:flex;flex-direction:column}
+.player-info .name{font-weight:bold;font-size:15px}
+.player-info .chips{color:#ffd93d;font-weight:bold;font-family:monospace;font-size:16px}
+.player-info .chips::before{content:'💰 '}
+.player-info .dealer-btn{background:#fff;color:#000;width:22px;height:22px;border-radius:50%;display:flex;justify-content:center;align-items:center;font-weight:900;font-size:11px;margin-left:6px;box-shadow:0 2px 6px rgba(0,0,0,0.5)}
+.hole-cards{display:flex;gap:6px;min-height:90px}
+.bet-display{display:flex;align-items:center;gap:6px;min-height:30px;font-weight:bold;color:#ffd93d;font-size:15px}
+.bet-display.empty{opacity:0.3}
+.bet-chip{width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#ffd93d,#d48a10);border:2px solid #a66020;box-shadow:inset 0 -2px 4px rgba(0,0,0,0.3)}
+.table-center{text-align:center;padding:14px 0}
+.pot-display{font-size:18px;font-weight:bold;color:#ffd93d;margin-bottom:10px;text-shadow:0 0 10px rgba(255,217,61,0.4)}
+.pot-display .amount{font-size:26px;font-family:monospace}
+.community-cards{display:flex;gap:8px;justify-content:center;min-height:95px;margin-bottom:10px}
+.phase-label{display:inline-block;padding:4px 14px;background:rgba(255,255,255,0.12);border-radius:20px;font-size:12px;font-weight:bold;margin-top:4px;letter-spacing:1px}
+.action-bar{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.raise-panel{display:none;flex-direction:column;gap:8px;align-items:center;background:rgba(0,0,0,0.45);padding:14px;border-radius:14px;margin:10px 0;max-width:400px;margin-left:auto;margin-right:auto}
+.raise-panel.show{display:flex}
+.raise-panel input[type="range"]{width:100%;max-width:300px;accent-color:#d4902a}
+.raise-value{font-size:20px;font-weight:bold;color:#ffd93d;font-family:monospace}
+.raise-buttons{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.raise-buttons button{padding:6px 12px;font-size:12px;margin:0;background:rgba(255,255,255,0.1)}
+.raise-buttons button:hover:not(:disabled){background:rgba(255,217,61,0.3)}
+
+/* Cards */
+.card{width:60px;height:86px;border-radius:7px;position:relative;background:#fff;color:#111;font-family:Georgia,serif;box-shadow:0 4px 10px rgba(0,0,0,0.5);display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;user-select:none;border:1px solid #888;animation:dealCard 0.35s ease-out}
+@keyframes dealCard{from{transform:translateY(-40px) rotate(-10deg);opacity:0}to{transform:translateY(0) rotate(0);opacity:1}}
+.card.red{color:#c22}
+.card.facedown{background:repeating-linear-gradient(45deg,#7a1a2a,#7a1a2a 4px,#5a0a1a 4px,#5a0a1a 8px);color:transparent;border-color:#4a0a1a}
+.card.facedown::after{content:'';position:absolute;inset:4px;border:2px dashed rgba(255,200,180,0.3);border-radius:4px}
+.card .corner{font-size:15px;font-weight:bold;line-height:1;display:flex;flex-direction:column;align-items:center}
+.card .corner-br{align-self:flex-end;transform:rotate(180deg)}
+.card .corner .suit{font-size:13px;margin-top:1px}
+.card .center-suit{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:30px}
+.card.small{width:42px;height:62px;padding:2px 4px}
+.card.small .corner{font-size:11px}
+.card.small .corner .suit{font-size:10px}
+.card.small .center-suit{font-size:22px}
+.card.highlight{box-shadow:0 0 16px rgba(255,217,61,0.9),0 4px 10px rgba(0,0,0,0.5)}
+.card.muted{opacity:0.4}
+
+.hand-info{font-size:12px;color:#ffd93d;min-height:16px;text-align:center;font-weight:bold}
+.status-label{font-size:11px;color:#c0a0d8;min-height:14px;text-align:center;font-style:italic}
+.status-label.warning{color:#ff9966}
+
+.flex-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.flex-between{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+
+#toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(30,15,45,0.96);border:1px solid rgba(180,120,220,0.4);padding:14px 24px;border-radius:10px;color:#fff;font-weight:600;z-index:1000;opacity:0;transition:opacity 0.3s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:999;opacity:0;pointer-events:none;transition:opacity 0.4s;padding:20px}
+.overlay.show{opacity:1;pointer-events:auto}
+.winner-text{font-size:52px;font-weight:900;margin-bottom:10px;background:linear-gradient(90deg,#ffd93d,#ff8a5c);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:zoom 0.5s ease-out}
+@keyframes zoom{from{transform:scale(0.3)}to{transform:scale(1)}}
+.winner-sub{font-size:17px;color:#d0b0e8;margin-bottom:12px;text-align:center}
+.showdown-cards{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap;justify-content:center}
+.back-home{position:fixed;top:15px;left:15px;color:#8a9aba;text-decoration:none;font-size:14px;opacity:0.7;z-index:100}
+.back-home:hover{opacity:1}
+.blink{animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:0.3}}
+.pulse{animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:0.65}}
+.info-banner{background:rgba(0,0,0,0.4);padding:8px 16px;border-radius:8px;font-size:13px;text-align:center;color:#d0b0e8;margin:8px 0}
+
+.chat-panel{width:100%;max-width:720px;background:rgba(0,0,0,0.4);border:1px solid rgba(180,120,220,0.2);border-radius:12px;padding:10px;margin-top:10px}
+.chat-messages{height:85px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.35);border-radius:8px;margin-bottom:6px;font-size:13px;line-height:1.5}
+.chat-messages::-webkit-scrollbar{width:6px}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(180,120,220,0.4);border-radius:3px}
+.chat-msg{margin-bottom:2px;word-wrap:break-word;animation:slideIn 0.25s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.chat-msg .sender{font-weight:bold;margin-right:4px}
+.chat-msg.mine .sender{color:#ffd93d}
+.chat-msg.theirs .sender{color:#d46aff}
+.chat-msg.system{color:#888;font-style:italic;font-size:12px;text-align:center}
+.chat-input-row{display:flex;gap:6px}
+.chat-input-row input{flex:1;padding:9px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(180,120,220,0.3);border-radius:8px;color:#fff;font-family:inherit;font-size:13px;outline:none;letter-spacing:normal;text-transform:none;text-align:left;max-width:none}
+.chat-input-row input:focus{border-color:#d46aff;box-shadow:0 0 0 2px rgba(212,106,255,0.2)}
+.chat-input-row button{padding:9px 18px;margin:0;font-size:13px;box-shadow:none}
+.emoji-row{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap}
+.emoji-btn{background:rgba(255,255,255,0.06);border:none;padding:4px 8px;border-radius:6px;font-size:14px;cursor:pointer;color:#fff;box-shadow:none;margin:0}
+.emoji-btn:hover{background:rgba(212,106,255,0.2);transform:none;box-shadow:none}
+</style>
+</head>
+<body>
+<a href="/game/" class="back-home">← 게임 목록</a>
+
+<div id="menu" class="screen">
+  <h1>포커 온라인</h1>
+  <p class="subtitle">🂡 Texas Hold'em Heads-Up · 친구와 실시간 1대1 포커</p>
+  <div class="btn-row">
+    <button class="big" onclick="showCreate()">🎮 방 만들기</button>
+    <button class="big secondary" onclick="showJoin()">🚪 방 참가하기</button>
+  </div>
+  <p class="info-banner">💰 칩 1000개로 시작 · 블라인드 10/20 · 먼저 상대 칩 전부 따면 승리</p>
+</div>
+
+<div id="create" class="screen hidden">
+  <h1>방 만들기</h1>
+  <p class="subtitle">친구에게 이 코드를 알려주세요 · 첫 판의 딜러입니다</p>
+  <div class="code-display" id="roomCode">------</div>
+  <div class="btn-row">
+    <button onclick="copyCode()">📋 코드 복사</button>
+    <p style="text-align:center;margin:20px 0" id="createStatus" class="blink">● 연결 대기 중...</p>
+    <button class="secondary" onclick="backToMenu()">← 돌아가기</button>
+  </div>
+</div>
+
+<div id="join" class="screen hidden">
+  <h1>방 참가</h1>
+  <p class="subtitle">6자리 방 코드를 입력하세요</p>
+  <div style="text-align:center;margin:20px 0">
+    <input type="text" id="codeInput" maxlength="6" placeholder="ABCDEF" autocomplete="off" />
+  </div>
+  <div class="btn-row">
+    <button class="big" onclick="doJoin()">✅ 참가하기</button>
+    <p id="joinStatus" style="text-align:center;margin:12px 0;min-height:20px"></p>
+    <button class="secondary" onclick="backToMenu()">← 돌아가기</button>
+  </div>
+</div>
+
+<div id="game" class="screen hidden">
+  <div class="poker-table">
+    <!-- Opponent area -->
+    <div style="display:flex;justify-content:center">
+      <div class="player-area" id="oppArea">
+        <div class="hole-cards" id="oppCards"></div>
+        <div class="player-info">
+          <div class="avatar opp">🤝</div>
+          <div class="details">
+            <div class="name">상대 <span id="oppDealer" class="dealer-btn" style="display:none">D</span></div>
+            <div class="chips" id="oppChips">1000</div>
+          </div>
+        </div>
+        <div class="bet-display" id="oppBet"></div>
+        <div class="status-label" id="oppStatus"></div>
+      </div>
+    </div>
+    <!-- Table center -->
+    <div class="table-center">
+      <div class="pot-display">팟 <span class="amount" id="potAmount">0</span></div>
+      <div class="community-cards" id="communityCards"></div>
+      <div class="phase-label" id="phaseLabel">대기</div>
+    </div>
+    <!-- My area -->
+    <div style="display:flex;justify-content:center">
+      <div class="player-area" id="myArea">
+        <div class="bet-display" id="myBet"></div>
+        <div class="hole-cards" id="myCards"></div>
+        <div class="player-info">
+          <div class="avatar">🎭</div>
+          <div class="details">
+            <div class="name">나 <span id="myDealer" class="dealer-btn" style="display:none">D</span></div>
+            <div class="chips" id="myChips">1000</div>
+          </div>
+        </div>
+        <div class="hand-info" id="myHandInfo"></div>
+        <div class="status-label" id="myStatus"></div>
+      </div>
+    </div>
+  </div>
+  <!-- Action bar -->
+  <div class="action-bar">
+    <button class="action fold" id="btnFold" onclick="doAction('fold')">폴드</button>
+    <button class="action check" id="btnCheck" onclick="doAction('check')">체크</button>
+    <button class="action call" id="btnCall" onclick="doAction('call')">콜</button>
+    <button class="action raise" id="btnRaise" onclick="showRaisePanel()">레이즈</button>
+    <button class="action allin" id="btnAllin" onclick="doAction('allin')">올인</button>
+  </div>
+  <!-- Raise panel -->
+  <div class="raise-panel" id="raisePanel">
+    <div class="raise-value" id="raiseValue">20</div>
+    <input type="range" id="raiseSlider" min="20" max="1000" step="10" value="20" />
+    <div class="raise-buttons">
+      <button onclick="setRaise('min')">최소</button>
+      <button onclick="setRaise('half')">½팟</button>
+      <button onclick="setRaise('pot')">팟</button>
+      <button onclick="setRaise('2pot')">2x 팟</button>
+      <button onclick="setRaise('max')">올인</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="action raise" onclick="confirmRaise()">레이즈 확정</button>
+      <button class="secondary" onclick="hideRaisePanel()">취소</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:6px">
+    <button class="secondary" onclick="requestReset()">🔄 새 게임</button>
+    <button class="danger" onclick="leaveGame()">🚪 나가기</button>
+  </div>
+  <p style="text-align:center;margin-top:4px;font-size:12px;color:#8a9aba" id="connStatus">✓ 연결됨</p>
+  <!-- Chat -->
+  <div class="chat-panel">
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="emoji-row">
+      <button class="emoji-btn" onclick="sendEmoji('🂡')">🂡</button>
+      <button class="emoji-btn" onclick="sendEmoji('👍')">👍</button>
+      <button class="emoji-btn" onclick="sendEmoji('🔥')">🔥</button>
+      <button class="emoji-btn" onclick="sendEmoji('💰')">💰</button>
+      <button class="emoji-btn" onclick="sendEmoji('🎉')">🎉</button>
+      <button class="emoji-btn" onclick="sendEmoji('😭')">😭</button>
+      <button class="emoji-btn" onclick="sendEmoji('🤔')">🤔</button>
+      <button class="emoji-btn" onclick="sendEmoji('GG')">GG</button>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="메시지 입력... (Enter로 전송)" maxlength="200" autocomplete="off" />
+      <button onclick="sendChat()">전송</button>
+    </div>
+  </div>
+</div>
+
+<div id="winnerOverlay" class="overlay">
+  <div class="winner-text" id="winnerText">승리!</div>
+  <div class="winner-sub" id="winnerSub"></div>
+  <div class="showdown-cards" id="showdownCards"></div>
+  <div class="btn-row">
+    <button onclick="closeWinner()">확인</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// ==================== CONFIG ====================
+const GAME_PREFIX='seoro-poker-v1';
+const STARTING_CHIPS=1000;
+const SMALL_BLIND=10;
+const BIG_BLIND=20;
+const SUITS=['s','h','d','c'];
+const SUIT_CHARS={s:'♠',h:'♥',d:'♦',c:'♣'};
+const RANK_NAMES={2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K',14:'A'};
+
+// ==================== STATE ====================
+let peer=null,conn=null,isHost=false;
+let myPlayer=null; // 0=host, 1=guest
+let state=null; // full game state (host authoritative)
+
+// ==================== UI HELPERS ====================
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+function toast(msg,dur=2200){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>t.classList.remove('show'),dur);
+}
+function generateCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c='';for(let i=0;i<6;i++)c+=chars[Math.floor(Math.random()*chars.length)];
+  return c;
+}
+
+// ==================== CONNECTION ====================
+function checkEnvironment(){
+  if(location.protocol==='file:'){
+    return '⚠ 로컬 파일(file://)로 열어서 작동하지 않습니다.\n\nNetlify에 배포하고 https:// URL로 접속하거나,\n로컬 서버(예: npx serve)를 띄워서 사용하세요.';
+  }
+  return null;
+}
+function showCreate(){
+  const envErr=checkEnvironment();
+  if(envErr){alert(envErr);return;}
+  showScreen('create');isHost=true;tryCreate();
+}
+function tryCreate(){
+  const code=generateCode();
+  document.getElementById('roomCode').textContent=code;
+  if(peer){try{peer.destroy();}catch(e){}}
+  console.log('[poker] Creating peer:',GAME_PREFIX+'-'+code);
+  peer=new Peer(GAME_PREFIX+'-'+code,{debug:1});
+  peer.on('open',id=>{
+    console.log('[poker] Peer open:',id);
+    document.getElementById('createStatus').innerHTML='<span class="blink">● 연결 대기 중...</span>';
+  });
+  peer.on('connection',c=>{
+    console.log('[poker] Connection received');
+    conn=c;setupConnection();myPlayer=0;
+    c.on('open',()=>{
+      console.log('[poker] Conn open');
+      showGame();
+      toast('상대방이 참가했습니다!');
+    });
+  });
+  peer.on('error',err=>{
+    console.error('[poker] Peer error:',err.type,err);
+    if(err.type==='unavailable-id')tryCreate();
+    else if(err.type==='network'||err.type==='server-error'){
+      document.getElementById('createStatus').innerHTML='<span style="color:#f66">⚠ 네트워크 오류. <button onclick="tryCreate()">🔄 재시도</button></span>';
+    } else document.getElementById('createStatus').innerHTML='<span style="color:#f66">⚠ 오류: '+err.type+'<br><button onclick="tryCreate()">🔄 재시도</button></span>';
+  });
+}
+function showJoin(){
+  const envErr=checkEnvironment();
+  if(envErr){alert(envErr);return;}
+  showScreen('join');
+  document.getElementById('codeInput').value='';
+  document.getElementById('joinStatus').textContent='';
+  setTimeout(()=>document.getElementById('codeInput').focus(),100);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!document.getElementById('join').classList.contains('hidden'))doJoin();
+});
+function doJoin(){
+  const code=document.getElementById('codeInput').value.toUpperCase().trim();
+  if(code.length!==6){
+    document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 코드는 6자리여야 합니다</span>';return;
+  }
+  isHost=false;
+  document.getElementById('joinStatus').innerHTML='<span class="blink">⏳ 연결 중... (최대 10초)</span>';
+  if(peer){try{peer.destroy();}catch(e){}}
+  console.log('[poker] Joining:',GAME_PREFIX+'-'+code);
+  peer=new Peer({debug:1});
+  peer.on('open',id=>{
+    console.log('[poker] Join peer open:',id);
+    conn=peer.connect(GAME_PREFIX+'-'+code,{reliable:true,serialization:'json'});
+    let connected=false;
+    const timer=setTimeout(()=>{
+      if(!connected){
+        document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 방을 찾을 수 없습니다. 코드를 다시 확인해주세요.<br><button onclick="doJoin()">🔄 재시도</button></span>';
+        try{conn.close();}catch(e){}
+      }
+    },10000);
+    conn.on('open',()=>{
+      connected=true;clearTimeout(timer);
+      console.log('[poker] Conn open');
+      setupConnection();myPlayer=1;
+      showGame();toast('연결되었습니다!');
+      sendMsg({type:'ready'});
+    });
+    conn.on('error',err=>{
+      console.error('[poker] Conn error:',err);
+      clearTimeout(timer);
+      document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 연결 실패</span>';
+    });
+  });
+  peer.on('error',err=>{
+    console.error('[poker] Peer error:',err.type,err);
+    if(err.type==='peer-unavailable'){
+      document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 해당 코드의 방이 없습니다.</span>';
+    } else document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 오류: '+err.type+'<br><button onclick="doJoin()">🔄 재시도</button></span>';
+  });
+}
+function setupConnection(){
+  conn.on('data',handleMsg);
+  conn.on('close',()=>{
+    toast('상대방의 연결이 끊어졌습니다',4000);
+    document.getElementById('connStatus').innerHTML='<span style="color:#f66">⚠ 연결 끊김</span>';
+  });
+}
+function sendMsg(d){if(conn&&conn.open)conn.send(d);}
+function showGame(){showScreen('game');}
+function handleMsg(d){
+  if(d.type==='ready'){
+    // Guest is ready - host starts game
+    if(isHost){
+      initGameHost();
+      startHand();
+      syncStateToGuest();
+      render();
+    }
+  } else if(d.type==='state'){
+    // Guest receives game state
+    state=d.state;
+    state._myView=true;
+    render();
+  } else if(d.type==='action'){
+    // Host receives action from guest
+    if(isHost)processAction(1,d.action,d.amount);
+  } else if(d.type==='resetReq'){
+    if(confirm('상대방이 새 게임을 요청했습니다. 수락?')){
+      sendMsg({type:'resetAck',accept:true});
+      if(isHost){initGameHost();startHand();syncStateToGuest();render();}
+    } else sendMsg({type:'resetAck',accept:false});
+  } else if(d.type==='resetAck'){
+    if(d.accept){
+      if(isHost){initGameHost();startHand();syncStateToGuest();render();}
+      toast('새 게임 시작!');
+    } else toast('상대방이 거절했습니다');
+  } else if(d.type==='chat'){
+    addChatMessage('상대',d.text,false);
+  }
+}
+
+// ==================== DECK ====================
+function makeDeck(){
+  const deck=[];
+  for(const s of SUITS)for(let r=2;r<=14;r++)deck.push({r,s});
+  return deck;
+}
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
+// ==================== HAND EVALUATOR ====================
+// Returns [category, ...tiebreakers] where higher is better
+// Categories: 0=high,1=pair,2=twopair,3=trips,4=straight,5=flush,6=fullhouse,7=quads,8=straightflush
+function eval5(cards){
+  const ranks=cards.map(c=>c.r).sort((a,b)=>b-a);
+  const suits=cards.map(c=>c.s);
+  const flush=suits.every(s=>s===suits[0]);
+  const counts={};
+  for(const r of ranks)counts[r]=(counts[r]||0)+1;
+  const countArr=Object.values(counts).sort((a,b)=>b-a);
+  const groups=Object.entries(counts).map(([r,c])=>({r:+r,c})).sort((a,b)=>b.c-a.c||b.r-a.r);
+  // Straight
+  let straight=false,straightHigh=0;
+  const unique=[...new Set(ranks)];
+  if(unique.length===5){
+    if(ranks[0]-ranks[4]===4){straight=true;straightHigh=ranks[0];}
+    else if(ranks[0]===14&&ranks[1]===5&&ranks[2]===4&&ranks[3]===3&&ranks[4]===2){straight=true;straightHigh=5;}
+  }
+  if(straight&&flush)return[8,straightHigh];
+  if(countArr[0]===4)return[7,groups[0].r,groups[1].r];
+  if(countArr[0]===3&&countArr[1]===2)return[6,groups[0].r,groups[1].r];
+  if(flush)return[5,...ranks];
+  if(straight)return[4,straightHigh];
+  if(countArr[0]===3)return[3,groups[0].r,groups[1].r,groups[2].r];
+  if(countArr[0]===2&&countArr[1]===2)return[2,groups[0].r,groups[1].r,groups[2].r];
+  if(countArr[0]===2)return[1,groups[0].r,groups[1].r,groups[2].r,groups[3].r];
+  return[0,...ranks];
+}
+function bestHand(cards){
+  // From 5-7 cards, pick best 5
+  if(cards.length<5)return null;
+  if(cards.length===5)return{score:eval5(cards),cards:cards};
+  let best=null,bestCards=null;
+  const n=cards.length;
+  // Choose 5 of n - iterate all combinations
+  for(let a=0;a<n-4;a++)
+  for(let b=a+1;b<n-3;b++)
+  for(let c=b+1;c<n-2;c++)
+  for(let d=c+1;d<n-1;d++)
+  for(let e=d+1;e<n;e++){
+    const sel=[cards[a],cards[b],cards[c],cards[d],cards[e]];
+    const sc=eval5(sel);
+    if(!best||cmpScore(sc,best)>0){best=sc;bestCards=sel;}
+  }
+  return{score:best,cards:bestCards};
+}
+function cmpScore(a,b){
+  for(let i=0;i<Math.max(a.length,b.length);i++){
+    const av=a[i]||0,bv=b[i]||0;
+    if(av>bv)return 1;
+    if(av<bv)return -1;
+  }
+  return 0;
+}
+function handName(score){
+  const names=['하이카드','원 페어','투 페어','트리플','스트레이트','플러시','풀하우스','포카드','스트레이트 플러시'];
+  if(!score)return '';
+  if(score[0]===8&&score[1]===14)return '로얄 플러시';
+  return names[score[0]]||'';
+}
+
+// ==================== GAME STATE (HOST AUTHORITATIVE) ====================
+function initGameHost(){
+  state={
+    deck:[],
+    holeCards:[[],[]], // [0]=host, [1]=guest
+    community:[],
+    chips:[STARTING_CHIPS,STARTING_CHIPS],
+    bets:[0,0], // this round contribution
+    totalBets:[0,0], // total hand contribution
+    pot:0,
+    currentBet:0,
+    minRaise:BIG_BLIND,
+    phase:'preflop',
+    currentPlayer:0,
+    dealer:0, // 0=host, 1=guest
+    folded:[false,false],
+    allin:[false,false],
+    handOver:false,
+    showdown:false,
+    winner:null,
+    winReason:null,
+    message:'',
+    actionLog:[],
+    handNum:0,
+    lastRaiser:null
+  };
+}
+function startHand(){
+  if(!isHost)return;
+  if(state.chips[0]<=0||state.chips[1]<=0){
+    // Game over
+    state.winner=state.chips[0]>0?0:1;
+    state.winReason='상대 칩 전부 획득';
+    state.handOver=true;
+    state.message='게임 종료!';
+    return;
+  }
+  state.deck=shuffle(makeDeck());
+  state.holeCards=[[state.deck.pop(),state.deck.pop()],[state.deck.pop(),state.deck.pop()]];
+  state.community=[];
+  state.bets=[0,0];
+  state.totalBets=[0,0];
+  state.pot=0;
+  state.currentBet=0;
+  state.minRaise=BIG_BLIND;
+  state.phase='preflop';
+  state.folded=[false,false];
+  state.allin=[false,false];
+  state.handOver=false;
+  state.showdown=false;
+  state.winner=null;
+  state.winReason=null;
+  state.message='';
+  state.actionLog=[];
+  state.handNum++;
+  state.lastRaiser=null;
+  // Post blinds (dealer = small blind in heads-up)
+  postBlind(state.dealer,SMALL_BLIND);
+  postBlind(1-state.dealer,BIG_BLIND);
+  state.currentBet=BIG_BLIND;
+  // In heads-up preflop, dealer/SB acts first
+  state.currentPlayer=state.dealer;
+  state.lastRaiser=1-state.dealer; // big blind is "last raiser"
+  log(`핸드 #${state.handNum} 시작 · 딜러: ${playerName(state.dealer)}`);
+  log(`${playerName(state.dealer)} 스몰 블라인드 ${SMALL_BLIND}`);
+  log(`${playerName(1-state.dealer)} 빅 블라인드 ${BIG_BLIND}`);
+}
+function playerName(p){return 'P'+(p+1);}
+function log(msg){
+  if(!state)return;
+  state.actionLog.push(msg);
+  if(state.actionLog.length>30)state.actionLog.shift();
+}
+function postBlind(player,amount){
+  const bet=Math.min(amount,state.chips[player]);
+  state.chips[player]-=bet;
+  state.bets[player]+=bet;
+  state.totalBets[player]+=bet;
+  state.pot+=bet;
+  if(state.chips[player]===0)state.allin[player]=true;
+}
+function syncStateToGuest(){
+  if(!isHost)return;
+  // Create sanitized state for guest
+  const guest={...state};
+  // Hide host's hole cards unless showdown
+  guest.holeCards=[
+    state.showdown?state.holeCards[0]:[{hidden:true},{hidden:true}],
+    state.holeCards[1] // guest sees their own
+  ];
+  // Don't send deck
+  delete guest.deck;
+  sendMsg({type:'state',state:guest});
+}
+
+// ==================== ACTIONS ====================
+function validActions(player){
+  if(!state||state.handOver||state.folded[player]||state.allin[player])return {};
+  if(state.currentPlayer!==player)return {};
+  const toCall=state.currentBet-state.bets[player];
+  const actions={};
+  actions.fold=true;
+  if(toCall===0){actions.check=true;}
+  else{
+    if(state.chips[player]>=toCall)actions.call=toCall;
+    else actions.call=state.chips[player]; // all-in call
+  }
+  // Raise: need chips more than toCall, and need to add at least minRaise
+  const maxBet=state.bets[player]+state.chips[player];
+  const minRaiseBet=state.currentBet+state.minRaise;
+  if(state.chips[player]>toCall && maxBet>state.currentBet){
+    actions.raise={min:Math.min(minRaiseBet,maxBet),max:maxBet};
+  }
+  if(state.chips[player]>0)actions.allin=state.bets[player]+state.chips[player];
+  return actions;
+}
+function doAction(type,amount){
+  if(!state||state.handOver)return;
+  if(state.currentPlayer!==myPlayer)return;
+  const va=validActions(myPlayer);
+  if(!va[type]){toast('불가능한 액션입니다');return;}
+  hideRaisePanel();
+  if(isHost){processAction(0,type,amount);}
+  else{sendMsg({type:'action',action:type,amount});}
+}
+function processAction(player,type,amount){
+  if(!isHost)return;
+  if(state.currentPlayer!==player)return;
+  if(state.handOver)return;
+  const toCall=state.currentBet-state.bets[player];
+  let description='';
+  if(type==='fold'){
+    state.folded[player]=true;
+    description=`${playerName(player)} 폴드`;
+    log(description);
+    // Other player wins
+    const winner=1-player;
+    state.chips[winner]+=state.pot;
+    state.pot=0;
+    state.handOver=true;
+    state.winner=winner;
+    state.winReason='폴드 승리';
+    state.message=`${playerName(winner)} 승리 (폴드)`;
+    syncStateToGuest();
+    render();
+    scheduleNextHand();
+    return;
+  }
+  if(type==='check'){
+    if(toCall!==0){toast('체크 불가');return;}
+    description=`${playerName(player)} 체크`;
+    log(description);
+  } else if(type==='call'){
+    const callAmount=Math.min(toCall,state.chips[player]);
+    state.chips[player]-=callAmount;
+    state.bets[player]+=callAmount;
+    state.totalBets[player]+=callAmount;
+    state.pot+=callAmount;
+    if(state.chips[player]===0)state.allin[player]=true;
+    description=`${playerName(player)} 콜 ${callAmount}`;
+    log(description);
+  } else if(type==='raise'){
+    // amount = total bet size for this round
+    const target=amount;
+    const diff=target-state.bets[player];
+    if(diff<=0||diff>state.chips[player]){toast('레이즈 금액 오류');return;}
+    state.chips[player]-=diff;
+    state.bets[player]=target;
+    state.totalBets[player]+=diff;
+    state.pot+=diff;
+    const raiseSize=target-state.currentBet;
+    state.minRaise=Math.max(state.minRaise,raiseSize);
+    state.currentBet=target;
+    state.lastRaiser=player;
+    if(state.chips[player]===0)state.allin[player]=true;
+    description=`${playerName(player)} 레이즈 ${target}`;
+    log(description);
+  } else if(type==='allin'){
+    const diff=state.chips[player];
+    const newBet=state.bets[player]+diff;
+    state.chips[player]=0;
+    state.bets[player]=newBet;
+    state.totalBets[player]+=diff;
+    state.pot+=diff;
+    if(newBet>state.currentBet){
+      const raiseSize=newBet-state.currentBet;
+      state.minRaise=Math.max(state.minRaise,raiseSize);
+      state.currentBet=newBet;
+      state.lastRaiser=player;
+    }
+    state.allin[player]=true;
+    description=`${playerName(player)} 올인! ${newBet}`;
+    log(description);
+  }
+  // Advance turn
+  advanceTurn();
+  syncStateToGuest();
+  render();
+}
+function advanceTurn(){
+  // Check if only one active player
+  const active=[0,1].filter(p=>!state.folded[p]);
+  if(active.length===1){
+    const winner=active[0];
+    state.chips[winner]+=state.pot;
+    state.pot=0;
+    state.handOver=true;
+    state.winner=winner;
+    state.winReason='상대 폴드';
+    scheduleNextHand();
+    return;
+  }
+  // Check if both all-in, or only one can act
+  const canAct=[0,1].filter(p=>!state.folded[p]&&!state.allin[p]);
+  if(canAct.length===0){
+    // Run out all community cards and showdown
+    dealRemainingCommunity();
+    doShowdown();
+    return;
+  }
+  // Next player
+  state.currentPlayer=1-state.currentPlayer;
+  // Skip folded/allin
+  while(state.folded[state.currentPlayer]||state.allin[state.currentPlayer]){
+    state.currentPlayer=1-state.currentPlayer;
+  }
+  // Check if betting round complete
+  if(bettingRoundComplete()){
+    nextPhase();
+  }
+}
+function bettingRoundComplete(){
+  // All active (non-folded, non-allin) players have matched currentBet
+  // AND the last raiser has been acted upon (next player is the last raiser)
+  for(const p of [0,1]){
+    if(state.folded[p]||state.allin[p])continue;
+    if(state.bets[p]!==state.currentBet)return false;
+  }
+  // Special: preflop big blind hasn't acted yet if no raise
+  if(state.phase==='preflop'&&state.currentBet===BIG_BLIND&&state.lastRaiser!==null){
+    // BB needs chance to act
+    const bb=1-state.dealer;
+    if(!state.folded[bb]&&!state.allin[bb]&&state.currentPlayer===bb){
+      return false;
+    }
+  }
+  if(state.currentPlayer===state.lastRaiser)return true;
+  return true;
+}
+function nextPhase(){
+  // Reset bets for new round
+  state.bets=[0,0];
+  state.currentBet=0;
+  state.minRaise=BIG_BLIND;
+  state.lastRaiser=null;
+  // Post-flop: non-dealer acts first
+  state.currentPlayer=1-state.dealer;
+  // Skip folded/allin
+  while(state.folded[state.currentPlayer]||state.allin[state.currentPlayer]){
+    state.currentPlayer=1-state.currentPlayer;
+    // If both skip, we're in all-in situation
+    if([0,1].every(p=>state.folded[p]||state.allin[p]))break;
+  }
+  if(state.phase==='preflop'){
+    state.phase='flop';
+    state.community.push(state.deck.pop(),state.deck.pop(),state.deck.pop());
+    log('— 플롭 —');
+  } else if(state.phase==='flop'){
+    state.phase='turn';
+    state.community.push(state.deck.pop());
+    log('— 턴 —');
+  } else if(state.phase==='turn'){
+    state.phase='river';
+    state.community.push(state.deck.pop());
+    log('— 리버 —');
+  } else if(state.phase==='river'){
+    doShowdown();
+    return;
+  }
+  // If all can't act (all allin), auto-advance
+  const canAct=[0,1].filter(p=>!state.folded[p]&&!state.allin[p]);
+  if(canAct.length===0){
+    // Deal rest and showdown
+    dealRemainingCommunity();
+    doShowdown();
+  }
+}
+function dealRemainingCommunity(){
+  while(state.community.length<5){
+    state.community.push(state.deck.pop());
+  }
+}
+function doShowdown(){
+  state.showdown=true;
+  state.phase='showdown';
+  log('— 쇼다운 —');
+  // Evaluate both hands
+  const hand0=bestHand([...state.holeCards[0],...state.community]);
+  const hand1=bestHand([...state.holeCards[1],...state.community]);
+  const cmp=cmpScore(hand0.score,hand1.score);
+  let winner;
+  if(cmp>0)winner=0;
+  else if(cmp<0)winner=1;
+  else winner=-1; // tie
+  state.handOver=true;
+  if(winner===-1){
+    // Split pot
+    const half=Math.floor(state.pot/2);
+    state.chips[0]+=half;
+    state.chips[1]+=state.pot-half;
+    state.pot=0;
+    state.winner=-1;
+    state.winReason='무승부';
+    state.message=`무승부! ${handName(hand0.score)}`;
+    log(`무승부: ${handName(hand0.score)} vs ${handName(hand1.score)}`);
+  } else {
+    state.chips[winner]+=state.pot;
+    state.pot=0;
+    state.winner=winner;
+    state.winReason=handName(winner===0?hand0.score:hand1.score)+' 승리';
+    state.message=`${playerName(winner)} 승리! (${handName(winner===0?hand0.score:hand1.score)})`;
+    log(`${playerName(winner)} 승리: ${handName(hand0.score)} vs ${handName(hand1.score)}`);
+  }
+  state.handResult={hand0,hand1};
+  scheduleNextHand();
+}
+function scheduleNextHand(){
+  // Wait a few seconds, then start next hand
+  setTimeout(()=>{
+    if(!isHost)return;
+    if(!state||!state.handOver)return;
+    // Check game end
+    if(state.chips[0]<=0||state.chips[1]<=0){
+      state.winner=state.chips[0]>0?0:1;
+      state.winReason='상대 칩 전부 획득';
+      state.gameOver=true;
+      syncStateToGuest();
+      render();
+      return;
+    }
+    // Swap dealer
+    state.dealer=1-state.dealer;
+    startHand();
+    syncStateToGuest();
+    render();
+  },3800);
+}
+
+// ==================== UI: RENDERING ====================
+function render(){
+  if(!state){return;}
+  const me=myPlayer,opp=1-myPlayer;
+  // Chips
+  document.getElementById('myChips').textContent=state.chips[me];
+  document.getElementById('oppChips').textContent=state.chips[opp];
+  // Dealer button
+  document.getElementById('myDealer').style.display=state.dealer===me?'inline-flex':'none';
+  document.getElementById('oppDealer').style.display=state.dealer===opp?'inline-flex':'none';
+  // Pot
+  document.getElementById('potAmount').textContent=state.pot;
+  // Phase
+  const phaseMap={preflop:'프리플롭',flop:'플롭',turn:'턴',river:'리버',showdown:'쇼다운'};
+  document.getElementById('phaseLabel').textContent=(phaseMap[state.phase]||'대기')+` · 핸드 #${state.handNum||0}`;
+  // Community cards
+  const cc=document.getElementById('communityCards');
+  cc.innerHTML='';
+  for(let i=0;i<5;i++){
+    if(i<state.community.length){
+      cc.appendChild(cardEl(state.community[i]));
+    } else {
+      const slot=document.createElement('div');
+      slot.className='card facedown muted';
+      slot.style.opacity='0.2';
+      cc.appendChild(slot);
+    }
+  }
+  // Hole cards
+  const myc=document.getElementById('myCards');
+  const oppc=document.getElementById('oppCards');
+  myc.innerHTML='';oppc.innerHTML='';
+  const myHole=state.holeCards[me]||[];
+  const oppHole=state.holeCards[opp]||[];
+  for(const c of myHole){
+    myc.appendChild(cardEl(c));
+  }
+  for(const c of oppHole){
+    if(c.hidden||!state.showdown)oppc.appendChild(cardDownEl());
+    else oppc.appendChild(cardEl(c));
+  }
+  // Bet displays
+  const myBet=document.getElementById('myBet');
+  const oppBet=document.getElementById('oppBet');
+  myBet.innerHTML=state.bets[me]>0?`<div class="bet-chip"></div> ${state.bets[me]}`:'';
+  oppBet.innerHTML=state.bets[opp]>0?`<div class="bet-chip"></div> ${state.bets[opp]}`:'';
+  // Active player
+  document.getElementById('myArea').classList.toggle('active',state.currentPlayer===me && !state.handOver);
+  document.getElementById('oppArea').classList.toggle('active',state.currentPlayer===opp && !state.handOver);
+  document.getElementById('myArea').classList.toggle('folded',state.folded[me]);
+  document.getElementById('oppArea').classList.toggle('folded',state.folded[opp]);
+  // Status labels
+  let myStatus='',oppStatus='';
+  if(state.folded[me])myStatus='폴드';
+  else if(state.allin[me])myStatus='올인';
+  else if(state.currentPlayer===me&&!state.handOver)myStatus='내 턴!';
+  if(state.folded[opp])oppStatus='폴드';
+  else if(state.allin[opp])oppStatus='올인';
+  else if(state.currentPlayer===opp&&!state.handOver)oppStatus='대기 중...';
+  document.getElementById('myStatus').textContent=myStatus;
+  document.getElementById('oppStatus').textContent=oppStatus;
+  // My hand info
+  const myHandInfo=document.getElementById('myHandInfo');
+  if(myHole.length===2&&!myHole[0].hidden){
+    const myBest=bestHand([...myHole,...state.community]);
+    if(myBest){
+      myHandInfo.textContent=handName(myBest.score);
+    } else {
+      myHandInfo.textContent='';
+    }
+  } else myHandInfo.textContent='';
+  // Action buttons
+  const va=validActions(me);
+  const myTurn=state.currentPlayer===me && !state.handOver;
+  document.getElementById('btnFold').disabled=!myTurn||!va.fold;
+  document.getElementById('btnCheck').disabled=!myTurn||!va.check;
+  document.getElementById('btnCheck').style.display=va.check?'':'none';
+  document.getElementById('btnCall').disabled=!myTurn||!va.call;
+  document.getElementById('btnCall').style.display=va.call!==undefined?'':'none';
+  if(va.call!==undefined)document.getElementById('btnCall').textContent=`콜 ${va.call}`;
+  document.getElementById('btnRaise').disabled=!myTurn||!va.raise;
+  document.getElementById('btnRaise').textContent=state.currentBet>0?'레이즈':'벳';
+  document.getElementById('btnAllin').disabled=!myTurn||!va.allin;
+  // Setup raise slider
+  if(va.raise){
+    const slider=document.getElementById('raiseSlider');
+    slider.min=va.raise.min;
+    slider.max=va.raise.max;
+    slider.value=Math.min(va.raise.min,va.raise.max);
+    document.getElementById('raiseValue').textContent=slider.value;
+  }
+  // Game over
+  if(state.gameOver){
+    setTimeout(showFinalWinner,300);
+  }
+  // Hand over display
+  if(state.handOver){
+    showHandResult();
+  }
+}
+function cardEl(card){
+  if(card.hidden)return cardDownEl();
+  const el=document.createElement('div');
+  const isRed=card.s==='h'||card.s==='d';
+  el.className='card'+(isRed?' red':'');
+  const rank=RANK_NAMES[card.r];
+  const suit=SUIT_CHARS[card.s];
+  el.innerHTML=`
+    <div class="corner">
+      <div>${rank}</div>
+      <div class="suit">${suit}</div>
+    </div>
+    <div class="center-suit">${suit}</div>
+    <div class="corner corner-br">
+      <div>${rank}</div>
+      <div class="suit">${suit}</div>
+    </div>
+  `;
+  return el;
+}
+function cardDownEl(){
+  const el=document.createElement('div');
+  el.className='card facedown';
+  return el;
+}
+let _lastShownHand=-1;
+function showHandResult(){
+  if(state.handNum===_lastShownHand)return;
+  _lastShownHand=state.handNum;
+  if(state.winner===-1){
+    toast('🤝 무승부! 팟을 나눠 가집니다',3500);
+  } else if(state.winner===myPlayer){
+    toast('🎉 이 핸드 승리! '+(state.winReason||''),3500);
+  } else {
+    toast('😭 이 핸드 패배 '+(state.winReason||''),3500);
+  }
+}
+function showFinalWinner(){
+  const o=document.getElementById('winnerOverlay');
+  const t=document.getElementById('winnerText');
+  const s=document.getElementById('winnerSub');
+  t.textContent=state.winner===myPlayer?'🎉 최종 승리!':'😭 패배';
+  s.innerHTML=state.winReason+'<br>최종 칩: '+state.chips[0]+' : '+state.chips[1];
+  o.classList.add('show');
+}
+function closeWinner(){document.getElementById('winnerOverlay').classList.remove('show');}
+
+// ==================== RAISE PANEL ====================
+function showRaisePanel(){
+  const va=validActions(myPlayer);
+  if(!va.raise)return;
+  document.getElementById('raisePanel').classList.add('show');
+  document.getElementById('raiseSlider').oninput=function(){
+    document.getElementById('raiseValue').textContent=this.value;
+  };
+}
+function hideRaisePanel(){document.getElementById('raisePanel').classList.remove('show');}
+function setRaise(mode){
+  const va=validActions(myPlayer);
+  if(!va.raise)return;
+  const slider=document.getElementById('raiseSlider');
+  let val;
+  if(mode==='min')val=va.raise.min;
+  else if(mode==='half')val=Math.max(va.raise.min,state.bets[myPlayer]+Math.floor((state.currentBet-state.bets[myPlayer]+state.pot)/2));
+  else if(mode==='pot')val=Math.max(va.raise.min,state.bets[myPlayer]+(state.currentBet-state.bets[myPlayer]+state.pot));
+  else if(mode==='2pot')val=Math.max(va.raise.min,state.bets[myPlayer]+2*(state.currentBet-state.bets[myPlayer]+state.pot));
+  else if(mode==='max')val=va.raise.max;
+  val=Math.min(val,va.raise.max);
+  val=Math.max(val,va.raise.min);
+  slider.value=val;
+  document.getElementById('raiseValue').textContent=val;
+}
+function confirmRaise(){
+  const val=parseInt(document.getElementById('raiseSlider').value);
+  doAction('raise',val);
+}
+
+// ==================== MENU / RESET ====================
+function requestReset(){
+  if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
+  sendMsg({type:'resetReq'});
+  toast('새 게임 요청을 보냈습니다');
+}
+function leaveGame(){
+  if(confirm('게임을 나가시겠습니까?'))backToMenu();
+}
+function backToMenu(){
+  if(conn){try{conn.close();}catch(e){}conn=null;}
+  if(peer){peer.destroy();peer=null;}
+  showScreen('menu');
+  document.getElementById('winnerOverlay').classList.remove('show');
+}
+function copyCode(){
+  const code=document.getElementById('roomCode').textContent;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(code).then(()=>toast('복사됨: '+code));
+  } else toast('코드: '+code);
+}
+
+// ==================== CHAT ====================
+function escapeHTML(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));}
+function addChatMessage(sender,text,isMine,isSystem){
+  const box=document.getElementById('chatMessages');
+  if(!box)return;
+  const div=document.createElement('div');
+  div.className='chat-msg '+(isSystem?'system':(isMine?'mine':'theirs'));
+  if(isSystem)div.textContent=text;
+  else div.innerHTML='<span class="sender">'+escapeHTML(sender)+':</span> '+escapeHTML(text);
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
+  while(box.children.length>100)box.removeChild(box.firstChild);
+}
+function sendChat(){
+  const input=document.getElementById('chatInput');
+  const msg=input.value.trim();
+  if(!msg)return;
+  if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
+  sendMsg({type:'chat',text:msg});
+  addChatMessage('나',msg,true);
+  input.value='';input.focus();
+}
+function sendEmoji(emoji){
+  if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
+  sendMsg({type:'chat',text:emoji});
+  addChatMessage('나',emoji,true);
+}
+setTimeout(()=>{
+  const ci=document.getElementById('chatInput');
+  if(ci&&!ci._bound){
+    ci._bound=true;
+    ci.addEventListener('keydown',e=>{if(e.key==='Enter'){e.stopPropagation();sendChat();}});
+  }
+},100);
+
+// Clear _msgShown on state update so new messages appear
+const origHandleMsg=handleMsg;
+</script>
+</body>
+</html>

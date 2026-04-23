@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>게임 · Fox Game Factory</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{min-height:100%;background:radial-gradient(ellipse at top,#1e1a3a 0%,#0d0a1e 70%,#050309 100%);font-family:'Malgun Gothic','Segoe UI',sans-serif;color:#fff}
+body{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:30px 16px;min-height:100vh}
+.container{max-width:1100px;width:100%}
+h1{font-size:56px;text-align:center;margin-bottom:14px;background:linear-gradient(90deg,#ffd93d,#ff6a9c,#6aa8ff,#4fdd8f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;letter-spacing:-2px;animation:shift 8s ease-in-out infinite}
+@keyframes shift{50%{filter:hue-rotate(30deg)}}
+.subtitle{text-align:center;color:#a0a8c8;margin-bottom:40px;font-size:16px}
+.games{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
+.game-card{background:rgba(30,25,50,0.7);border:1px solid rgba(180,150,220,0.2);border-radius:20px;padding:28px 22px;text-align:center;text-decoration:none;color:#fff;transition:all 0.3s;backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,0.4);position:relative;overflow:hidden;display:block}
+.game-card::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);transition:left 0.6s}
+.game-card:hover{transform:translateY(-8px);border-color:rgba(255,217,61,0.4);box-shadow:0 20px 50px rgba(100,60,180,0.3)}
+.game-card:hover::before{left:100%}
+.game-emoji{font-size:60px;margin-bottom:12px;display:block;line-height:1}
+.game-title{font-size:22px;font-weight:900;margin-bottom:6px}
+.game-desc{font-size:13px;color:#a0a8c8;line-height:1.5;min-height:40px}
+.game-tag{display:inline-block;font-size:11px;padding:3px 10px;border-radius:12px;margin-top:12px;font-weight:bold;letter-spacing:0.5px}
+.tag-solo{background:rgba(100,180,120,0.25);color:#7ddb8f}
+.tag-multi{background:rgba(255,150,80,0.25);color:#ffb080}
+
+.game-card.seoro:hover{border-color:rgba(255,217,61,0.7)}
+.game-card.omok:hover{border-color:rgba(120,140,200,0.7)}
+.game-card.chess:hover{border-color:rgba(180,150,80,0.7)}
+.game-card.billiard:hover{border-color:rgba(80,180,120,0.7)}
+.game-card.poker:hover{border-color:rgba(212,106,255,0.7)}
+
+footer{text-align:center;margin-top:50px;color:#6a7090;font-size:13px}
+.info-box{background:rgba(30,25,50,0.6);border:1px solid rgba(100,140,200,0.2);border-radius:14px;padding:18px 24px;margin:30px auto;max-width:720px;font-size:13px;color:#b0b8d0;line-height:1.7}
+.info-box b{color:#ffd93d}
+.back-home{position:fixed;top:15px;left:15px;color:#8a9aba;text-decoration:none;font-size:14px;opacity:0.7;z-index:100}
+.back-home:hover{opacity:1}
+</style>
+</head>
+<body>
+<a href="/" class="back-home">← 메인으로</a>
+<div class="container">
+  <h1>Game Factory</h1>
+  <p class="subtitle">🎮 직접 만든 웹게임 모음 · 친구와 바로 플레이</p>
+  <div class="games">
+    <a href="/seoro/" class="game-card seoro">
+      <span class="game-emoji">🦸</span>
+      <div class="game-title">서로용사</div>
+      <div class="game-desc">음식을 싫어하는 5살 서로의 횡스크롤 액션</div>
+      <div class="game-tag tag-solo">솔로 플레이</div>
+    </a>
+    <a href="/omok/" class="game-card omok">
+      <span class="game-emoji">⚫⚪</span>
+      <div class="game-title">오목</div>
+      <div class="game-desc">전통 오목 · 33 금수 · 친구와 실시간</div>
+      <div class="game-tag tag-multi">1:1 멀티</div>
+    </a>
+    <a href="/chess/" class="game-card chess">
+      <span class="game-emoji">♛</span>
+      <div class="game-title">체스</div>
+      <div class="game-desc">정통 체스 · 캐슬링/앙파상/프로모션 지원</div>
+      <div class="game-tag tag-multi">1:1 멀티</div>
+    </a>
+    <a href="/billiard/" class="game-card billiard">
+      <span class="game-emoji">🎱</span>
+      <div class="game-title">4구 당구</div>
+      <div class="game-desc">한국식 4구 · 실제 물리 엔진 · 10점 선취</div>
+      <div class="game-tag tag-multi">1:1 멀티</div>
+    </a>
+    <a href="/poker/" class="game-card poker">
+      <span class="game-emoji">🂡</span>
+      <div class="game-title">포커</div>
+      <div class="game-desc">Texas Hold'em 헤즈업 · 블라인드/핸드평가</div>
+      <div class="game-tag tag-multi">1:1 멀티</div>
+    </a>
+  </div>
+
+  <div class="info-box">
+    <b>💡 멀티플레이 안내</b><br>
+    모든 멀티플레이 게임은 <b>P2P 방식</b>(WebRTC)으로 작동해요.<br>
+    한 쪽이 <b>"방 만들기"</b>를 눌러 6자리 코드를 받고,<br>
+    다른 쪽이 그 코드로 <b>"방 참가"</b>하면 바로 연결됩니다.<br>
+    서버를 거치지 않고 두 브라우저끼리 직접 통신해서 부담 없어요.
+  </div>
+
+  <footer>
+    Fox Game Factory · 즐거운 플레이 되세요!
+  </footer>
+</div>
+</body>
+</html>
