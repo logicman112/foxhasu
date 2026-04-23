@@ -71,6 +71,21 @@ canvas{border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,0.7);max-width:95vw;
 .shot-info span{font-weight:600}
 .hit-red{color:#ff6a6a}
 .hit-opp{color:#ff9966}
+.controls-row{display:flex;gap:16px;width:100%;max-width:820px;flex-wrap:wrap;justify-content:space-between;align-items:stretch}
+.power-section{flex:1;min-width:280px;background:rgba(0,0,0,0.3);padding:10px 14px;border-radius:10px;border:1px solid rgba(80,180,120,0.2);display:flex;flex-direction:column;gap:8px}
+.spin-section{background:rgba(0,0,0,0.3);padding:10px 14px;border-radius:10px;border:1px solid rgba(80,180,120,0.2);display:flex;flex-direction:column;align-items:center;gap:4px}
+.power-label-top{font-size:12px;font-weight:bold;color:#c0d8c8;letter-spacing:0.5px}
+.power-buttons{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.power-preset{padding:5px 10px;font-size:11px;margin:0;background:rgba(255,255,255,0.08);box-shadow:none;border:1px solid rgba(80,180,120,0.3)}
+.power-preset:hover{background:rgba(125,219,143,0.25);transform:none;box-shadow:none}
+#spinCanvas{background:#0a3020;border-radius:8px;cursor:crosshair;border:1px solid rgba(80,180,120,0.3)}
+.spin-info{display:flex;align-items:center;gap:8px;font-size:11px;color:#c0d8c8}
+.spin-reset{padding:3px 8px;font-size:10px;margin:0;box-shadow:none;background:rgba(255,255,255,0.08)}
+.timer-display{font-family:monospace;font-weight:bold;padding:6px 16px;background:rgba(0,0,0,0.4);border-radius:20px;font-size:14px;text-align:center}
+.timer-display.warning{background:rgba(255,100,50,0.3);color:#ff9966;animation:pulseWarn 0.5s infinite}
+.timer-display.critical{background:rgba(255,40,40,0.4);color:#ff5050;animation:pulseWarn 0.3s infinite}
+@keyframes pulseWarn{50%{opacity:0.6;transform:scale(1.05)}}
+#muteBtn.muted{opacity:0.7}
 </style>
 </head>
 <body>
@@ -136,9 +151,28 @@ canvas{border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,0.7);max-width:95vw;
       </div>
     </div>
     <canvas id="table" width="820" height="440"></canvas>
-    <div class="power-bar-container">
-      <div class="power-bar" id="powerBar"></div>
-      <div class="power-bar-label" id="powerLabel">마우스 클릭+홀드로 파워 조절, 떼면 샷!</div>
+    <div class="controls-row">
+      <div class="power-section">
+        <div class="power-label-top">💪 파워 (<span id="powerPercent">0</span>%)</div>
+        <div class="power-bar-container">
+          <div class="power-bar" id="powerBar"></div>
+          <div class="power-bar-label" id="powerLabel">마우스 클릭+홀드로 파워 조절, 떼면 샷!</div>
+        </div>
+        <div class="power-buttons">
+          <button class="power-preset" onclick="setFixedPower(0.25)">약(25%)</button>
+          <button class="power-preset" onclick="setFixedPower(0.5)">중(50%)</button>
+          <button class="power-preset" onclick="setFixedPower(0.75)">강(75%)</button>
+          <button class="power-preset" onclick="setFixedPower(1.0)">최대(100%)</button>
+        </div>
+      </div>
+      <div class="spin-section">
+        <div class="power-label-top">🎯 타점 · 스핀</div>
+        <canvas id="spinCanvas" width="140" height="140" title="클릭해서 타점 지정"></canvas>
+        <div class="spin-info">
+          <span id="spinLabel">중심</span>
+          <button class="spin-reset" onclick="resetSpin()">↺ 중심</button>
+        </div>
+      </div>
     </div>
     <div class="shot-info" id="shotInfo" style="display:none">
       <span>이번 샷: </span>
@@ -147,9 +181,11 @@ canvas{border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,0.7);max-width:95vw;
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
       <button onclick="requestReset()">🔄 새 게임</button>
+      <button id="muteBtn" onclick="toggleMute()" class="secondary">🔊 소리 켜짐</button>
       <button class="danger" onclick="resign()">🏳 기권</button>
       <button class="danger" onclick="leaveGame()">🚪 나가기</button>
     </div>
+    <div id="timerLabel" class="timer-display">⏱ --</div>
     <p class="hint" id="connStatus">✓ 연결됨</p>
     <div class="chat-panel">
       <div class="chat-messages" id="chatMessages"></div>
@@ -196,13 +232,14 @@ const MAX_POWER=14;
 const CHARGE_TIME=1400; // ms to full power
 const TARGET_SCORE=10;
 const DT=1; // simulation dt
+const TURN_TIME=25;
 
 // ==================== STATE ====================
 let peer=null,conn=null,isHost=false;
 let balls=[]; // 0=white, 1=yellow, 2=red1, 3=red2
-let scores=[0,0]; // index by player (0=host/white, 1=guest/yellow)
-let currentPlayer=0; // 0 or 1
-let myPlayer=null; // 0 or 1
+let scores=[0,0];
+let currentPlayer=0;
+let myPlayer=null;
 let simulating=false;
 let winner=null;
 let aimAngle=0;
@@ -210,11 +247,122 @@ let aimMouse=null;
 let charging=false;
 let chargeStart=0;
 let powerValue=0;
-let collisionLog=[]; // track what cue ball hits during shot
+let collisionLog=[];
 let shotInProgress=false;
 let chatMessages=[];
+let aimSpin={x:0,y:0};
+let fixedPower=null;
+let turnTimeLeft=TURN_TIME,turnStartTime=0,timerInterval=null;
+let muted=localStorage.getItem('billiard-muted')==='1';
 
 const cv=document.getElementById('table'),ctx=cv.getContext('2d');
+const sctx=document.getElementById('spinCanvas').getContext('2d');
+
+// ==================== AUDIO ====================
+let AC=null;
+function startAudio(){
+  if(AC)return;
+  try{AC=new(window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();}catch(e){}
+}
+addEventListener('click',startAudio);
+addEventListener('keydown',startAudio);
+function tone(f,dur,type='square',vol=0.05,slideTo=null,t0=0){
+  if(!AC||muted)return;
+  const o=AC.createOscillator(),gn=AC.createGain();
+  const st=AC.currentTime+t0;
+  o.type=type;o.frequency.setValueAtTime(f,st);
+  if(slideTo)o.frequency.exponentialRampToValueAtTime(Math.max(1,slideTo),st+dur);
+  gn.gain.setValueAtTime(0,st);
+  gn.gain.linearRampToValueAtTime(vol,st+0.008);
+  gn.gain.exponentialRampToValueAtTime(0.0001,st+dur);
+  o.connect(gn);gn.connect(AC.destination);
+  o.start(st);o.stop(st+dur+0.02);
+}
+function noise(dur,vol=0.05,filter=2000,t0=0){
+  if(!AC||muted)return;
+  const bs=AC.createBufferSource(),buf=AC.createBuffer(1,Math.max(1,Math.floor(AC.sampleRate*dur)),AC.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);
+  bs.buffer=buf;
+  const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=filter;
+  const gn=AC.createGain();gn.gain.value=vol;
+  bs.connect(f);f.connect(gn);gn.connect(AC.destination);
+  bs.start(AC.currentTime+t0);
+}
+function sfxCueStrike(power){
+  const p=Math.min(1,power/14);
+  tone(130+p*60,0.09,'sawtooth',0.09+p*0.08,70);
+  tone(240,0.05,'square',0.05,180,0.02);
+  noise(0.06,0.06+p*0.04,3500);
+}
+function sfxBallClack(intensity){
+  const i=Math.min(1,intensity/5);
+  const f=850+Math.random()*350+i*200;
+  tone(f,0.05,'sine',0.03+i*0.1);
+  tone(f*1.8,0.03,'triangle',0.02+i*0.05);
+  noise(0.03,0.015+i*0.04,9000);
+}
+function sfxRailHit(intensity){
+  const i=Math.min(1,intensity/5);
+  tone(150+Math.random()*50,0.09,'square',0.025+i*0.07,80);
+  noise(0.08,0.02+i*0.05,600);
+}
+function sfxScoreBil(){
+  tone(784,0.12,'triangle',0.07);
+  setTimeout(()=>{if(AC)tone(988,0.12,'triangle',0.07);},110);
+  setTimeout(()=>{if(AC)tone(1318,0.2,'triangle',0.07);},220);
+}
+function sfxFoul(){
+  tone(200,0.14,'sawtooth',0.08,100);
+  tone(150,0.2,'square',0.05,80,0.08);
+}
+function sfxClick(){tone(800,0.04,'square',0.04);}
+function sfxWarnTimer(){tone(880,0.08,'square',0.06);}
+function toggleMute(){
+  muted=!muted;
+  localStorage.setItem('billiard-muted',muted?'1':'0');
+  const btn=document.getElementById('muteBtn');
+  if(muted){btn.innerHTML='🔇 소리 꺼짐';btn.classList.add('muted');}
+  else{btn.innerHTML='🔊 소리 켜짐';btn.classList.remove('muted');}
+}
+// Turn timer
+function startTurnTimer(){
+  stopTurnTimer();
+  if(winner!==null)return;
+  turnTimeLeft=TURN_TIME;
+  turnStartTime=Date.now();
+  updateTimerDisplay();
+  timerInterval=setInterval(()=>{
+    if(simulating)return; // pause timer during shot
+    const elapsed=(Date.now()-turnStartTime)/1000;
+    turnTimeLeft=Math.max(0,TURN_TIME-elapsed);
+    updateTimerDisplay();
+    if(currentPlayer===myPlayer && Math.ceil(turnTimeLeft)<=5 && Math.ceil(turnTimeLeft)!==(window._lastTick||0)){
+      window._lastTick=Math.ceil(turnTimeLeft);
+      if(turnTimeLeft>0)sfxWarnTimer();
+    }
+    if(turnTimeLeft<=0){
+      stopTurnTimer();
+      if(currentPlayer===myPlayer && !simulating)autoShot();
+    }
+  },100);
+}
+function stopTurnTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null;}}
+function updateTimerDisplay(){
+  const lbl=document.getElementById('timerLabel');
+  if(!lbl)return;
+  if(winner!==null){lbl.textContent='⏱ --';lbl.className='timer-display';return;}
+  const sec=Math.ceil(turnTimeLeft);
+  lbl.textContent='⏱ '+sec+'초 · '+(currentPlayer===myPlayer?'내 턴':'상대 턴');
+  lbl.className='timer-display'+(sec<=5?' critical':(sec<=10?' warning':''));
+}
+function autoShot(){
+  if(winner!==null||simulating)return;
+  if(currentPlayer!==myPlayer)return;
+  toast('⏰ 시간 초과! 자동 약한 샷');
+  const angle=Math.random()*Math.PI*2;
+  myShoot(angle,3);
+}
 
 // ==================== UI HELPERS ====================
 function showScreen(id){
@@ -332,8 +480,7 @@ function setupConnection(){
 function sendMsg(d){if(conn&&conn.open)conn.send(d);}
 function handleMsg(d){
   if(d.type==='shot'){
-    // Opponent started a shot: execute same shot locally
-    executeShotLocal(d.angle,d.power,d.player);
+    executeShotLocal(d.angle,d.power,d.player,d.spinX||0,d.spinY||0);
   } else if(d.type==='syncState'){
     // Authoritative state from shooter at shot end
     balls=d.balls.map(b=>({...b}));
@@ -360,12 +507,11 @@ function handleMsg(d){
 
 // ==================== GAME STATE ====================
 function initBalls(){
-  // Standard-ish 4-ball setup
   balls=[
-    {id:0,type:'cue',owner:0,x:CANVAS_W*0.28,y:CANVAS_H/2,vx:0,vy:0,color:'white'},
-    {id:1,type:'cue',owner:1,x:CANVAS_W*0.62,y:CANVAS_H/2-32,vx:0,vy:0,color:'yellow'},
-    {id:2,type:'red',x:CANVAS_W*0.70,y:CANVAS_H/2+32,vx:0,vy:0,color:'red'},
-    {id:3,type:'red',x:CANVAS_W*0.76,y:CANVAS_H/2-20,vx:0,vy:0,color:'red'}
+    {id:0,type:'cue',owner:0,x:CANVAS_W*0.28,y:CANVAS_H/2,vx:0,vy:0,spin:0,side:0,color:'white'},
+    {id:1,type:'cue',owner:1,x:CANVAS_W*0.62,y:CANVAS_H/2-32,vx:0,vy:0,spin:0,side:0,color:'yellow'},
+    {id:2,type:'red',x:CANVAS_W*0.70,y:CANVAS_H/2+32,vx:0,vy:0,spin:0,side:0,color:'red'},
+    {id:3,type:'red',x:CANVAS_W*0.76,y:CANVAS_H/2-20,vx:0,vy:0,spin:0,side:0,color:'red'}
   ];
 }
 function startGame(){
@@ -384,6 +530,13 @@ function resetGame(){
   powerValue=0;
   document.getElementById('winnerOverlay').classList.remove('show');
   updateStatus();draw();
+  startTurnTimer();
+  startAudio();
+  const btn=document.getElementById('muteBtn');
+  if(btn){
+    if(muted){btn.innerHTML='🔇 소리 꺼짐';btn.classList.add('muted');}
+    else btn.innerHTML='🔊 소리 켜짐';
+  }
 }
 function requestReset(){
   if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
@@ -431,20 +584,51 @@ function updateStatus(){
 
 // ==================== PHYSICS ====================
 function simStep(){
-  // Move
+  // Move + spin curving (Magnus-like side spin effect)
   for(const b of balls){
+    // Side spin causes slight curve perpendicular to motion
+    const speed=Math.hypot(b.vx,b.vy);
+    if(speed>0.3 && b.side){
+      const perpX=-b.vy/speed;
+      const perpY=b.vx/speed;
+      const curveMag=b.side*0.018*speed;
+      b.vx+=perpX*curveMag;
+      b.vy+=perpY*curveMag;
+    }
     b.x+=b.vx*DT;
     b.y+=b.vy*DT;
     b.vx*=FRICTION;
     b.vy*=FRICTION;
-    if(Math.hypot(b.vx,b.vy)<MIN_VEL){b.vx=0;b.vy=0;}
+    // Spin decay (friction with table)
+    if(b.spin)b.spin*=0.97;
+    if(b.side)b.side*=0.975;
+    if(Math.abs(b.spin)<0.02)b.spin=0;
+    if(Math.abs(b.side)<0.02)b.side=0;
+    if(Math.hypot(b.vx,b.vy)<MIN_VEL){
+      b.vx=0;b.vy=0;
+      // Apply residual spin as velocity nudge (follow/draw after ball stops)
+      // Not realistic, so skip
+      b.spin=0;b.side=0;
+    }
   }
   // Rails
   for(const b of balls){
-    if(b.x<RAIL+R){b.x=RAIL+R;if(b.vx<0)b.vx=-b.vx*RAIL_BOUNCE;}
-    if(b.x>CANVAS_W-RAIL-R){b.x=CANVAS_W-RAIL-R;if(b.vx>0)b.vx=-b.vx*RAIL_BOUNCE;}
-    if(b.y<RAIL+R){b.y=RAIL+R;if(b.vy<0)b.vy=-b.vy*RAIL_BOUNCE;}
-    if(b.y>CANVAS_H-RAIL-R){b.y=CANVAS_H-RAIL-R;if(b.vy>0)b.vy=-b.vy*RAIL_BOUNCE;}
+    let hit=null;
+    if(b.x<RAIL+R){b.x=RAIL+R;if(b.vx<0){hit='lr';b.vx=-b.vx*RAIL_BOUNCE;}}
+    else if(b.x>CANVAS_W-RAIL-R){b.x=CANVAS_W-RAIL-R;if(b.vx>0){hit='lr';b.vx=-b.vx*RAIL_BOUNCE;}}
+    if(b.y<RAIL+R){b.y=RAIL+R;if(b.vy<0){hit='tb';b.vy=-b.vy*RAIL_BOUNCE;}}
+    else if(b.y>CANVAS_H-RAIL-R){b.y=CANVAS_H-RAIL-R;if(b.vy>0){hit='tb';b.vy=-b.vy*RAIL_BOUNCE;}}
+    if(hit){
+      // English on cushion: side spin tweaks rebound angle + tangential velocity
+      if(b.side){
+        if(hit==='lr')b.vy+=b.side*0.6*Math.sign(b.vx||1);
+        else b.vx-=b.side*0.6*Math.sign(b.vy||1);
+        b.side*=0.4;
+      }
+      if(b.spin){b.spin*=0.5;}
+      const intensity=Math.hypot(b.vx,b.vy);
+      if(intensity>0.3)sfxRailHit(intensity);
+    }
   }
   // Ball-ball (multiple passes for stability)
   for(let pass=0;pass<2;pass++){
@@ -477,15 +661,49 @@ function collideBalls(a,b){
   if(va-vb<=0)return; // moving apart
   // Swap normal components (equal mass elastic)
   const dv=vb-va;
-  a.vx+=dv*nx*-1; // becomes va after swap-
+  a.vx+=dv*nx*-1;
   a.vy+=dv*ny*-1;
   b.vx+=dv*nx;
   b.vy+=dv*ny;
+
+  // ===== SPIN PHYSICS =====
+  const shootingCueId=currentPlayer;
+  const aIsCue=a.id===shootingCueId;
+  const bIsCue=b.id===shootingCueId;
+  // Determine which is cue ball (if any)
+  let cueBall=null,objBall=null,cueNormal=1;
+  if(aIsCue){cueBall=a;objBall=b;cueNormal=1;}
+  else if(bIsCue){cueBall=b;objBall=a;cueNormal=-1;}
+  if(cueBall){
+    // Follow/Draw (top/bottom spin): adjusts cue ball post-collision velocity along original direction
+    // Top spin (spin>0): cue ball continues forward after contact (follow-through)
+    // Bottom spin (spin<0): cue ball reverses (draw)
+    if(cueBall.spin){
+      // Apply along the original direction of the cue ball (which was normal to contact)
+      const nX=nx*cueNormal;
+      const nY=ny*cueNormal;
+      cueBall.vx+=nX*cueBall.spin*0.55;
+      cueBall.vy+=nY*cueBall.spin*0.55;
+      // Spin partly dissipated on contact
+      cueBall.spin*=0.35;
+    }
+    // Side spin (English): transfers tangential velocity to object ball (throw)
+    if(cueBall.side){
+      const tX=-ny,tY=nx;
+      const throwMag=cueBall.side*0.22;
+      objBall.vx+=tX*throwMag;
+      objBall.vy+=tY*throwMag;
+      cueBall.side*=0.6;
+      // Transfer tiny bit of spin to object ball
+      objBall.side=(objBall.side||0)+cueBall.side*0.1;
+    }
+  }
+  // Sound effect proportional to impact velocity
+  const impact=Math.abs(va-vb);
+  if(impact>0.3)sfxBallClack(impact);
+
   // Record collision involving cue ball
-  const shootingCueId=currentPlayer; // 0 or 1 = ball ids
   if(simulating){
-    const aIsCue=a.id===shootingCueId;
-    const bIsCue=b.id===shootingCueId;
     if(aIsCue||bIsCue){
       const other=aIsCue?b.id:a.id;
       if(collisionLog[collisionLog.length-1]!==other){
@@ -496,15 +714,23 @@ function collideBalls(a,b){
 }
 
 // ==================== SHOT ====================
-function executeShotLocal(angle,power,player){
-  // Apply velocity to player's cue ball
+function executeShotLocal(angle,power,player,spinX,spinY){
   const cue=balls[player];
   cue.vx=Math.cos(angle)*power;
   cue.vy=Math.sin(angle)*power;
+  // Apply spin from tip point (normalize to -1~1)
+  // y: negative=top hit (follow), positive=bottom hit (draw, reverse)
+  // x: negative=left english, positive=right english
+  const sY=spinY||0,sX=spinX||0;
+  // Convert tip position to spin: follow is positive spin (continues forward),
+  // draw is negative spin (reverses). Top of ball = follow.
+  cue.spin=-sY*power*0.3; // follow positive on top hit
+  cue.side=sX*power*0.25;
   simulating=true;
   collisionLog=[];
   shotInProgress=true;
   currentPlayer=player;
+  sfxCueStrike(power);
   document.getElementById('shotInfo').style.display='flex';
   updateShotInfo();
   updateStatus();
@@ -513,9 +739,9 @@ function myShoot(angle,power){
   if(winner!==null)return;
   if(currentPlayer!==myPlayer)return;
   if(simulating)return;
-  // Send to opponent
-  sendMsg({type:'shot',angle,power,player:myPlayer});
-  executeShotLocal(angle,power,myPlayer);
+  const sX=aimSpin.x,sY=aimSpin.y;
+  sendMsg({type:'shot',angle,power,player:myPlayer,spinX:sX,spinY:sY});
+  executeShotLocal(angle,power,myPlayer,sX,sY);
 }
 function onShotEnd(){
   // Determine score
@@ -523,7 +749,8 @@ function onShotEnd(){
   const oppBallId=currentPlayer===0?1:0;
   const hitOpp=collisionLog.includes(oppBallId);
   const scored=redsHit.size>=2;
-  if(scored)scores[currentPlayer]+=1;
+  if(scored){scores[currentPlayer]+=1;sfxScoreBil();}
+  else if(hitOpp||redsHit.size===0||redsHit.size===1){sfxFoul();}
   // Info message
   const shooter=currentPlayer===myPlayer?'나':'상대';
   if(scored){
@@ -561,6 +788,7 @@ function onShotEnd(){
   updateStatus();
   setTimeout(()=>{document.getElementById('shotInfo').style.display='none';},2500);
   draw();
+  if(winner===null)startTurnTimer();
 }
 function updateShotInfo(){
   const redsHit=new Set(collisionLog.filter(id=>id===2||id===3));
@@ -730,6 +958,122 @@ function draw(){
   }
 }
 
+// ==================== SPIN PANEL ====================
+function drawSpinPanel(){
+  const s=140,cx=s/2,cy=s/2,rr=56;
+  sctx.clearRect(0,0,s,s);
+  // bg
+  sctx.fillStyle='#0a3020';
+  sctx.fillRect(0,0,s,s);
+  // outer circle (rim) shadow
+  sctx.fillStyle='rgba(0,0,0,0.45)';
+  sctx.beginPath();sctx.arc(cx+2,cy+3,rr,0,Math.PI*2);sctx.fill();
+  // ball gradient
+  const grd=sctx.createRadialGradient(cx-20,cy-24,4,cx,cy,rr);
+  grd.addColorStop(0,'#ffffff');
+  grd.addColorStop(0.5,'#f5f5f5');
+  grd.addColorStop(0.85,'#c8c8c8');
+  grd.addColorStop(1,'#888');
+  sctx.fillStyle=grd;
+  sctx.beginPath();sctx.arc(cx,cy,rr,0,Math.PI*2);sctx.fill();
+  // outline
+  sctx.strokeStyle='rgba(0,0,0,0.35)';sctx.lineWidth=1;
+  sctx.beginPath();sctx.arc(cx,cy,rr,0,Math.PI*2);sctx.stroke();
+  // crosshair
+  sctx.strokeStyle='rgba(0,0,0,0.12)';sctx.lineWidth=1;
+  sctx.beginPath();
+  sctx.moveTo(cx-rr,cy);sctx.lineTo(cx+rr,cy);
+  sctx.moveTo(cx,cy-rr);sctx.lineTo(cx,cy+rr);
+  sctx.stroke();
+  // dashed rings at 1/3, 2/3
+  sctx.setLineDash([2,3]);
+  sctx.strokeStyle='rgba(0,0,0,0.1)';
+  sctx.beginPath();sctx.arc(cx,cy,rr/3,0,Math.PI*2);sctx.stroke();
+  sctx.beginPath();sctx.arc(cx,cy,rr*2/3,0,Math.PI*2);sctx.stroke();
+  sctx.setLineDash([]);
+  // highlight
+  sctx.fillStyle='rgba(255,255,255,0.5)';
+  sctx.beginPath();sctx.arc(cx-18,cy-22,14,0,Math.PI*2);sctx.fill();
+  // tip position (red dot)
+  const tipX=cx+aimSpin.x*rr*0.85;
+  const tipY=cy+aimSpin.y*rr*0.85;
+  // tip shadow
+  sctx.fillStyle='rgba(200,0,0,0.25)';
+  sctx.beginPath();sctx.arc(tipX+1,tipY+1,7,0,Math.PI*2);sctx.fill();
+  // tip marker
+  const tipGrd=sctx.createRadialGradient(tipX-2,tipY-2,1,tipX,tipY,6);
+  tipGrd.addColorStop(0,'#ff6060');
+  tipGrd.addColorStop(1,'#a00000');
+  sctx.fillStyle=tipGrd;
+  sctx.beginPath();sctx.arc(tipX,tipY,6,0,Math.PI*2);sctx.fill();
+  sctx.strokeStyle='#fff';sctx.lineWidth=1.2;
+  sctx.stroke();
+  // labels
+  sctx.fillStyle='rgba(0,0,0,0.5)';
+  sctx.font='bold 9px monospace';
+  sctx.textAlign='center';
+  sctx.fillText('탑(팔로)',cx,14);
+  sctx.fillText('바텀(드로)',cx,s-6);
+  sctx.save();
+  sctx.translate(6,cy);sctx.rotate(-Math.PI/2);
+  sctx.fillText('좌잉글리시',0,0);
+  sctx.restore();
+  sctx.save();
+  sctx.translate(s-6,cy);sctx.rotate(Math.PI/2);
+  sctx.fillText('우잉글리시',0,0);
+  sctx.restore();
+}
+function updateSpinLabel(){
+  const lbl=document.getElementById('spinLabel');
+  if(!lbl)return;
+  const absX=Math.abs(aimSpin.x),absY=Math.abs(aimSpin.y);
+  if(absX<0.1&&absY<0.1){lbl.textContent='● 중심';return;}
+  const parts=[];
+  if(aimSpin.y<-0.15)parts.push('탑(팔로)');
+  else if(aimSpin.y>0.15)parts.push('바텀(드로)');
+  if(aimSpin.x<-0.15)parts.push('좌 잉글리시');
+  else if(aimSpin.x>0.15)parts.push('우 잉글리시');
+  lbl.textContent=parts.join(' · ')||'중심';
+}
+function resetSpin(){
+  aimSpin.x=0;aimSpin.y=0;
+  drawSpinPanel();updateSpinLabel();
+  sfxClick();
+}
+function setupSpinCanvas(){
+  const sc=document.getElementById('spinCanvas');
+  function handleSpinClick(e){
+    const rect=sc.getBoundingClientRect();
+    const evt=e.touches?e.touches[0]:e;
+    const mx=(evt.clientX-rect.left)*sc.width/rect.width;
+    const my=(evt.clientY-rect.top)*sc.height/rect.height;
+    const dx=(mx-70)/(56*0.85);
+    const dy=(my-70)/(56*0.85);
+    const dist=Math.hypot(dx,dy);
+    if(dist>1){aimSpin.x=dx/dist;aimSpin.y=dy/dist;}
+    else{aimSpin.x=dx;aimSpin.y=dy;}
+    drawSpinPanel();updateSpinLabel();
+    sfxClick();
+  }
+  sc.addEventListener('click',handleSpinClick);
+  sc.addEventListener('mousedown',e=>{e.preventDefault();});
+  let spinDragging=false;
+  sc.addEventListener('mousedown',e=>{spinDragging=true;handleSpinClick(e);});
+  sc.addEventListener('mousemove',e=>{if(spinDragging)handleSpinClick(e);});
+  sc.addEventListener('mouseup',()=>{spinDragging=false;});
+  sc.addEventListener('mouseleave',()=>{spinDragging=false;});
+  sc.addEventListener('touchstart',e=>{e.preventDefault();spinDragging=true;handleSpinClick(e);},{passive:false});
+  sc.addEventListener('touchmove',e=>{e.preventDefault();if(spinDragging)handleSpinClick(e);},{passive:false});
+  sc.addEventListener('touchend',()=>{spinDragging=false;});
+}
+function setFixedPower(p){
+  fixedPower=p;
+  document.getElementById('powerBar').style.width=(p*100)+'%';
+  document.getElementById('powerPercent').textContent=Math.round(p*100);
+  sfxClick();
+  toast('파워 고정: '+Math.round(p*100)+'% (다음 샷에 적용)',1500);
+}
+
 // ==================== INPUT ====================
 function getMouseCoords(e){
   const rect=cv.getBoundingClientRect();
@@ -801,6 +1145,8 @@ function loop(){
     const elapsed=performance.now()-chargeStart;
     powerValue=Math.min(elapsed/CHARGE_TIME,1);
     document.getElementById('powerBar').style.width=(powerValue*100)+'%';
+    const pp=document.getElementById('powerPercent');
+    if(pp)pp.textContent=Math.round(powerValue*100);
   }
   if(simulating){
     simStep();
@@ -861,6 +1207,9 @@ setTimeout(()=>{
 // ==================== INIT ====================
 initBalls();
 myPlayer=0;
+setupSpinCanvas();
+drawSpinPanel();
+updateSpinLabel();
 draw();
 loop();
 </script>
