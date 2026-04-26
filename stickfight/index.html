@@ -126,8 +126,11 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
     펌프 입력: <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 또는 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 둘 다 OK<br>
     ⏱ 한 판 2분 · 3판 2선승제
   </div>
-  <div style="font-size:12px;color:#888;text-align:center;margin-top:10px">
-    ⚔ 검(사정+/기술불가) · 🎩 모자(방어+) · 👢 부츠(속도+/2단점프) · 🛡 방패(L로 막기) · 🧥 자켓(HP+33%)
+  <div style="font-size:12px;color:#888;text-align:center;margin-top:10px;line-height:1.6">
+    ⚔ <b>검</b>(A=발차기 사정 · S=더 길게 휘두르기 · 아도겐X 워류겐O)<br>
+    🎩 <b>모자</b>(데미지 +3 · 아우라 표시) · 👢 <b>부츠</b>(속도+/2단점프)<br>
+    🛡 <b>방패</b>(L로 막기) · 🧥 <b>자켓</b>(HP+33%)<br>
+    💡 <b>↓ 앉기</b>로 아도겐 회피 가능!
   </div>
 </div>
 
@@ -535,6 +538,7 @@ function handleMsg(d){
       opp.hp=d.hp;opp.maxhp=d.maxhp;
       opp.state=d.state;opp.stateTime=d.stateTime;
       opp.blocking=d.blocking;
+      opp.crouching=!!d.crouching;
       opp.items=new Set(d.items||[]);
       opp.onGround=d.onGround;
     }
@@ -587,7 +591,7 @@ function newPlayer(idx){
     items:new Set(),
     inputHistory:[],lastDir:'neutral',
     color:idx===0?'#3a6acc':'#cc3a6a',
-    iframe:0,blocking:false,hitFlash:0
+    iframe:0,blocking:false,hitFlash:0,crouching:false
   };
 }
 function applyItemEffects(p){
@@ -599,16 +603,27 @@ function applyItemEffects(p){
 }
 function getSpeed(p){return SPEED_BASE+(p.items.has('boots')?2:0);}
 function getMaxJumps(p){return p.items.has('boots')?2:1;}
-function getDefense(p){return (p.items.has('hat')?2:0);}
-function getReach(p,base){return base+(p.items.has('sword')?SWORD_BONUS:0);}
-function getDmg(p,base){return base+(p.items.has('sword')?4:0);}
+function getDefense(p){return 0;} // hat no longer defense; now damage boost
+function getReach(p,base,kind){
+  if(!p.items.has('sword'))return base;
+  // Sword: A(punch) reaches like kick, S(kick) is even longer (sword swing)
+  if(kind==='punch')return KICK_REACH;
+  if(kind==='kick')return KICK_REACH+18;
+  return base+SWORD_BONUS;
+}
+function getDmg(p,base){
+  let d=base;
+  if(p.items.has('sword'))d+=4;
+  if(p.items.has('hat'))d+=3; // hat now boosts damage
+  return d;
+}
 // AABB rectangle intersection
 function rectsHit(ax,ay,aw,ah,bx,by,bw,bh){
   return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
 }
 // Build hitbox rect for a kind of attack from attacker
 function getAttackHitbox(att,kind){
-  const reach=getReach(att,kind==='punch'?PUNCH_REACH:kind==='kick'?KICK_REACH:SHORYU_REACH);
+  const reach=getReach(att,kind==='punch'?PUNCH_REACH:kind==='kick'?KICK_REACH:SHORYU_REACH,kind);
   const f=att.facing;
   let hbW,hbH,hbX,hbY;
   if(kind==='punch'){
@@ -626,9 +641,10 @@ function getAttackHitbox(att,kind){
   }
   return {x:hbX,y:hbY,w:hbW,h:hbH};
 }
-// Get opponent body box
+// Get opponent body box (shorter when crouching)
 function getBodyBox(p){
-  return {x:p.x-BODY_HALF_W,y:p.y-BODY_HEIGHT,w:BODY_HALF_W*2,h:BODY_HEIGHT};
+  const h=p.crouching?28:BODY_HEIGHT;
+  return {x:p.x-BODY_HALF_W,y:p.y-h,w:BODY_HALF_W*2,h};
 }
 
 // Record direction on KEY PRESS (most reliable for fighting game commands)
@@ -689,12 +705,15 @@ function updateMe(dt){
   }
   // Block
   me.blocking=me.items.has('shield')&&held(KB.block)&&me.onGround&&me.state!=='hit';
-  // Movement
+  // Crouching: hold ↓ on ground, while not attacking/hit
+  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit'].includes(me.state);
+  // Movement (crouching slows, attacking stops)
   if(!['punch','kick','hadouken','shoryuken','hit'].includes(me.state)){
     let dx=0;
     if(held(KB.left))dx-=1;
     if(held(KB.right))dx+=1;
     if(me.blocking)dx*=0.3;
+    if(me.crouching)dx*=0.4;
     me.vx=dx*getSpeed(me);
   } else {
     me.vx*=0.85;
@@ -709,12 +728,11 @@ function updateMe(dt){
   // Attacks
   if(me.state!=='hit'&&me.state!=='hadouken'&&me.state!=='shoryuken'){
     if(pressed(KB.punch)){
-      if(!me.items.has('sword')){
-        const sp=checkSpecial();
-        if(sp==='hadouken')startHadouken();
-        else if(sp==='shoryuken')startShoryuken();
-        else startPunch();
-      } else startPunch();
+      const sp=checkSpecial();
+      // Shoryuken works with or without sword. Hadouken blocked by sword.
+      if(sp==='shoryuken')startShoryuken();
+      else if(sp==='hadouken'&&!me.items.has('sword'))startHadouken();
+      else startPunch();
     } else if(pressed(KB.kick)){
       startKick();
     }
@@ -739,9 +757,11 @@ function updateMe(dt){
   me.stateTime+=dt;
   if(me.iframe>0)me.iframe-=dt;
   if(me.hitFlash>0)me.hitFlash-=dt;
-  // Auto-end states
-  if(me.state==='punch'&&me.stateTime>0.25)me.state='idle';
-  else if(me.state==='kick'&&me.stateTime>0.32)me.state='idle';
+  // Auto-end states (sword has longer recovery)
+  const swordPunchDur=me.items.has('sword')?0.42:0.25;
+  const swordKickDur=me.items.has('sword')?0.55:0.32;
+  if(me.state==='punch'&&me.stateTime>swordPunchDur)me.state='idle';
+  else if(me.state==='kick'&&me.stateTime>swordKickDur)me.state='idle';
   else if(me.state==='hadouken'&&me.stateTime>0.5)me.state='idle';
   else if(me.state==='shoryuken'&&me.stateTime>0.4)me.state='idle';
   else if(me.state==='hit'&&me.stateTime>0.3)me.state='idle';
@@ -785,12 +805,16 @@ function updateMe(dt){
 
 function startPunch(){
   me.state='punch';me.stateTime=0;sfxPunch();
-  scheduleHitCheck('punch',0.08);
+  // Sword swing has more wind-up delay
+  const delay=me.items.has('sword')?0.16:0.08;
+  scheduleHitCheck('punch',delay);
   sendMsg({type:'attack',kind:'punch'});
 }
 function startKick(){
   me.state='kick';me.stateTime=0;sfxKick();
-  scheduleHitCheck('kick',0.12);
+  // Sword swing kick: slower windup (휘두르기)
+  const delay=me.items.has('sword')?0.22:0.12;
+  scheduleHitCheck('kick',delay);
   sendMsg({type:'attack',kind:'kick'});
 }
 function startHadouken(){
@@ -831,8 +855,8 @@ function startHadouken(){
   }
   setTimeout(()=>{
     if(roundOver||matchOver)return;
-    const proj={x:me.x+me.facing*22,y:me.y-30,vx:me.facing*HADO_SPEED,owner:myIdx,
-      dmg:HADO_DMG,r:16,life:120,hue:hue,pulse:0};
+    const proj={x:me.x+me.facing*22,y:me.y-42,vx:me.facing*HADO_SPEED,owner:myIdx,
+      dmg:HADO_DMG,r:14,life:120,hue:hue,pulse:0};
     projectiles.push(proj);
     sendMsg({type:'projectile',x:proj.x,y:proj.y,vx:proj.vx,dmg:proj.dmg,owner:myIdx});
     // Launch burst
@@ -858,7 +882,7 @@ function startHadouken(){
   me.inputHistory=[];
 }
 function startShoryuken(){
-  if(me.items.has('sword'))return;
+  // Sword does NOT block shoryuken (only hadouken is blocked)
   me.state='shoryuken';me.stateTime=0;
   me.iframe=0.2;
   sfxShoryuken();
@@ -1019,8 +1043,10 @@ function updateProjectiles(){
     }
     if(pr.x<-30||pr.x>W+30||pr.life<=0){projectiles.splice(i,1);continue;}
     if(pr.owner!==myIdx&&me&&me.state!=='dead'){
-      const dx=Math.abs(pr.x-me.x),dy=Math.abs(pr.y-(me.y-30));
-      if(dx<pr.r+12&&dy<28){
+      // Use body box for proper collision (so crouching dodges)
+      const body=getBodyBox(me);
+      const projL=pr.x-pr.r,projT=pr.y-8,projW=pr.r*2,projH=16;
+      if(rectsHit(projL,projT,projW,projH,body.x,body.y,body.w,body.h)){
         applyDamageToMe(pr.dmg,pr.vx>0?1:-1,'hadouken');
         // BIG explosion
         flash(pr.hue===210?'150,200,255':'255,150,200',0.5);
@@ -1359,17 +1385,33 @@ function drawStickman(p){
   const pose=getPose(p,t);
   const baseColor=p.hitFlash>0?'#fff':p.color;
 
-  // Jacket aura (around body)
+  const auraY=p.crouching?-15:-30;
+  const auraH=p.crouching?16:32;
+  // Jacket aura (around body) - purple
   if(p.items.has('jacket')){
     ctx.strokeStyle='rgba(150,100,255,0.5)';
     ctx.lineWidth=2;
     ctx.beginPath();
-    ctx.ellipse(0,-30,18,32,0,0,Math.PI*2);
+    ctx.ellipse(0,auraY,18,auraH,0,0,Math.PI*2);
     ctx.stroke();
     ctx.strokeStyle='rgba(150,100,255,0.25)';
     ctx.lineWidth=4;
     ctx.beginPath();
-    ctx.ellipse(0,-30,20,34,0,0,Math.PI*2);
+    ctx.ellipse(0,auraY,20,auraH+2,0,0,Math.PI*2);
+    ctx.stroke();
+  }
+  // Hat aura - red/orange (damage boost)
+  if(p.items.has('hat')){
+    const pulse=Math.sin(t*4.5)*0.2+0.6;
+    ctx.strokeStyle=`rgba(255,140,40,${pulse*0.7})`;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.ellipse(0,auraY,16,auraH,0,0,Math.PI*2);
+    ctx.stroke();
+    ctx.strokeStyle=`rgba(255,200,80,${pulse*0.4})`;
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    ctx.ellipse(0,auraY,19,auraH+2,0,0,Math.PI*2);
     ctx.stroke();
   }
 
@@ -1480,12 +1522,36 @@ function drawStickman(p){
     }
   }
 
+  // Hat: damage boost text + spark particles
+  if(p.items.has('hat')){
+    const headTopY=p.y-(p.crouching?32:62);
+    ctx.save();
+    ctx.font='bold 10px Malgun Gothic';
+    ctx.textAlign='center';
+    ctx.fillStyle='#000';
+    ctx.fillText('💪 데미지 증가',p.x+1,headTopY-5+1);
+    ctx.fillStyle='#ffaa44';
+    ctx.shadowBlur=6;ctx.shadowColor='#ff5500';
+    ctx.fillText('💪 데미지 증가',p.x,headTopY-5);
+    ctx.shadowBlur=0;
+    ctx.restore();
+    // Spark particles around (occasionally)
+    if(Math.random()<0.2){
+      const auraY2=p.crouching?-15:-30;
+      const auraH2=p.crouching?16:32;
+      const ang=Math.random()*Math.PI*2;
+      spawnP({x:p.x+Math.cos(ang)*18,y:p.y+auraY2+Math.sin(ang)*auraH2,
+        vx:Math.cos(ang)*0.5,vy:-0.3-Math.random()*0.5,life:14,maxLife:14,type:'spark',
+        color:'#ff9933',size:2,gravity:-0.02});
+    }
+  }
   // Name tag above head
   ctx.save();
   ctx.fillStyle=p.idx===myIdx?'#5a8aff':'#ff5a8a';
   ctx.font='bold 11px Malgun Gothic';
   ctx.textAlign='center';
-  ctx.fillText(p.idx===myIdx?'나':'상대',p.x,p.y-72);
+  const nameY=p.y-(p.crouching?42:72)-(p.items.has('hat')?15:0);
+  ctx.fillText(p.idx===myIdx?'나':'상대',p.x,nameY);
   ctx.restore();
 }
 function drawLimb(L){
@@ -1578,6 +1644,15 @@ function getPose(p,t){
     pose.rArm.j3={x:6,y:-35};
     pose.lArm.j2={x:-3,y:-41};
     pose.lArm.j3={x:-6,y:-32};
+  }
+  // Crouch overrides pose - lower head, knees bent, body shorter
+  if(p.crouching&&p.state!=='hit'&&p.state!=='dead'&&p.state!=='punch'&&p.state!=='kick'){
+    pose.head={x:0,y:-30};
+    pose.spine={top:{x:0,y:-26},bot:{x:0,y:-12}};
+    pose.lLeg={j1:{x:-2,y:-12},j2:{x:-7,y:-6},j3:{x:-7,y:0}};
+    pose.rLeg={j1:{x:2,y:-12},j2:{x:7,y:-6},j3:{x:7,y:0}};
+    pose.lArm={j1:{x:-3,y:-25},j2:{x:-7,y:-18},j3:{x:-8,y:-12}};
+    pose.rArm={j1:{x:3,y:-25},j2:{x:7,y:-18},j3:{x:8,y:-12}};
   }
   return pose;
 }
@@ -1763,6 +1838,7 @@ function broadcastState(){
     hp:me.hp,maxhp:me.maxhp,
     state:me.state,stateTime:me.stateTime,
     blocking:me.blocking,
+    crouching:me.crouching,
     items:Array.from(me.items),
     onGround:me.onGround
   });
