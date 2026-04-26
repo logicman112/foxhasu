@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>똥피하기 1:1 · DodgePoop Battle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:radial-gradient(ellipse at top,#3a2820 0%,#1a1008 70%,#08040a 100%);font-family:'Malgun Gothic','Segoe UI',sans-serif;color:#fff;overflow:hidden}
+body{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:10px}
+.screen{max-width:720px;width:100%;padding:30px;background:rgba(40,25,18,0.75);border:1px solid rgba(180,120,60,0.25);border-radius:24px;backdrop-filter:blur(12px);box-shadow:0 25px 70px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.08);animation:fadein 0.4s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.screen.hidden{display:none}
+h1{font-size:48px;text-align:center;margin-bottom:14px;background:linear-gradient(90deg,#c08850,#8b5a2b,#4a2810);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;letter-spacing:-1px}
+.subtitle{text-align:center;color:#c0a888;margin-bottom:28px;font-size:15px}
+button{background:linear-gradient(135deg,#a0703a,#5a3a1a);border:none;color:#fff;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin:6px;transition:all 0.18s;font-family:inherit;box-shadow:0 6px 20px rgba(80,50,20,0.4)}
+button:hover{transform:translateY(-3px);box-shadow:0 10px 25px rgba(140,90,40,0.5)}
+button:active{transform:translateY(-1px)}
+button.secondary{background:linear-gradient(135deg,#444,#666)}
+button.danger{background:linear-gradient(135deg,#c03850,#901a30)}
+button.big{padding:18px 36px;font-size:17px;width:100%;max-width:280px}
+.btn-row{display:flex;flex-direction:column;gap:10px;align-items:center}
+.code-display{font-size:50px;font-weight:900;letter-spacing:12px;text-align:center;background:rgba(255,255,255,0.05);padding:22px;border-radius:14px;margin:20px 0;font-family:'Consolas','Courier New',monospace;border:2px dashed rgba(192,136,80,0.3);color:#c08850;text-shadow:0 0 20px rgba(192,136,80,0.4)}
+input[type="text"]{font-size:28px;padding:16px 22px;border:2px solid rgba(180,120,60,0.4);background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;text-align:center;font-family:'Consolas',monospace;letter-spacing:8px;text-transform:uppercase;width:100%;max-width:320px;font-weight:bold;outline:none}
+input[type="text"]:focus{border-color:#c08850;box-shadow:0 0 0 3px rgba(192,136,80,0.2)}
+
+#game{max-width:760px;padding:14px}
+#game-container{display:flex;flex-direction:column;align-items:center;gap:10px}
+.status-row{display:flex;width:100%;max-width:720px;gap:10px;justify-content:space-between;align-items:stretch}
+.player-stats{flex:1;padding:10px 14px;background:rgba(0,0,0,0.55);border-radius:12px;border:2px solid transparent;transition:all 0.3s}
+.player-stats.my{border-color:rgba(125,219,143,0.4)}
+.player-stats.opp{border-color:rgba(255,150,80,0.4)}
+.player-stats.hit{animation:hitFlash 0.3s}
+@keyframes hitFlash{0%,100%{background:rgba(0,0,0,0.55)}50%{background:rgba(220,40,40,0.6)}}
+.player-stats.dead{opacity:0.4;filter:grayscale(0.8)}
+.player-stats .name{font-weight:bold;font-size:14px;margin-bottom:4px}
+.player-stats .hearts{font-size:18px;letter-spacing:2px;line-height:1}
+.player-stats .heart{color:#f55;text-shadow:0 0 4px rgba(255,80,80,0.5)}
+.player-stats .heart.empty{color:#511}
+.player-stats .score{font-family:monospace;font-size:14px;color:#ffd93d;margin-top:4px}
+.vs-divider{display:flex;align-items:center;font-weight:900;font-size:24px;color:#c08850;padding:0 8px}
+
+.game-area{display:flex;gap:14px;width:100%;max-width:720px;justify-content:center}
+.field-container{display:flex;flex-direction:column;align-items:center;gap:6px}
+.field-label{font-size:13px;font-weight:bold;padding:4px 12px;border-radius:12px;background:rgba(0,0,0,0.5)}
+.field-label.my{color:#7ddb8f}
+.field-label.opp{color:#ffb080}
+canvas.field{background:linear-gradient(180deg,#87ceeb 0%,#bde4f5 60%,#f5e6c8 100%);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.5);display:block;touch-action:none;border:3px solid rgba(0,0,0,0.4)}
+canvas.field.my{border-color:rgba(125,219,143,0.6);cursor:pointer}
+canvas.field.opp{border-color:rgba(255,150,80,0.6);opacity:0.85}
+
+.action-bar{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:8px 0}
+.attack-counter{padding:8px 16px;background:linear-gradient(135deg,#d4af37,#8a6a1a);border-radius:20px;font-weight:bold;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(212,175,55,0.4)}
+
+#toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(40,25,18,0.96);border:1px solid rgba(180,120,60,0.4);padding:14px 24px;border-radius:10px;color:#fff;font-weight:600;z-index:1000;opacity:0;transition:opacity 0.3s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:999;opacity:0;pointer-events:none;transition:opacity 0.4s;padding:20px}
+.overlay.show{opacity:1;pointer-events:auto}
+.winner-text{font-size:60px;font-weight:900;margin-bottom:10px;background:linear-gradient(90deg,#ffd93d,#ff8a5c);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:zoom 0.5s ease-out}
+@keyframes zoom{from{transform:scale(0.3)}to{transform:scale(1)}}
+.winner-sub{font-size:18px;color:#d0b890;margin-bottom:24px;text-align:center}
+.back-home{position:fixed;top:15px;left:15px;color:#8a9aba;text-decoration:none;font-size:14px;opacity:0.7;z-index:100}
+.back-home:hover{opacity:1}
+.blink{animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:0.3}}
+#muteBtn{background:linear-gradient(135deg,#444,#222);font-size:13px;padding:10px 16px}
+#muteBtn.muted{background:linear-gradient(135deg,#666,#333);opacity:0.7}
+.warning-flash{position:absolute;inset:0;background:rgba(255,40,40,0.4);pointer-events:none;animation:warnFlash 0.4s;border-radius:10px}
+@keyframes warnFlash{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
+.field-wrap{position:relative}
+.countdown{position:fixed;inset:0;display:flex;justify-content:center;align-items:center;z-index:998;font-size:120px;font-weight:900;color:#ffd93d;text-shadow:0 0 30px rgba(255,217,61,0.8);pointer-events:none;opacity:0}
+.countdown.show{opacity:1;animation:countPop 1s ease-out}
+@keyframes countPop{0%{transform:scale(0.3);opacity:0}50%{transform:scale(1.2);opacity:1}100%{transform:scale(1);opacity:0}}
+.hint{font-size:13px;color:#a0a0a0;text-align:center;margin-top:8px}
+.hint b{color:#ffd93d}
+
+.chat-panel{width:100%;max-width:720px;background:rgba(0,0,0,0.4);border:1px solid rgba(180,120,60,0.2);border-radius:12px;padding:10px;margin-top:8px}
+.chat-messages{height:80px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.35);border-radius:8px;margin-bottom:6px;font-size:13px;line-height:1.5}
+.chat-messages::-webkit-scrollbar{width:6px}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(180,120,60,0.4);border-radius:3px}
+.chat-msg{margin-bottom:2px;word-wrap:break-word;animation:slideIn 0.25s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.chat-msg .sender{font-weight:bold;margin-right:4px}
+.chat-msg.mine .sender{color:#ffd93d}
+.chat-msg.theirs .sender{color:#c08850}
+.chat-msg.system{color:#888;font-style:italic;font-size:12px;text-align:center}
+.chat-input-row{display:flex;gap:6px}
+.chat-input-row input{flex:1;padding:9px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(180,120,60,0.3);border-radius:8px;color:#fff;font-family:inherit;font-size:13px;outline:none;letter-spacing:normal;text-transform:none;text-align:left;max-width:none}
+.chat-input-row input:focus{border-color:#c08850;box-shadow:0 0 0 2px rgba(192,136,80,0.2)}
+.chat-input-row button{padding:9px 18px;margin:0;font-size:13px;box-shadow:none}
+.emoji-row{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap}
+.emoji-btn{background:rgba(255,255,255,0.06);border:none;padding:4px 8px;border-radius:6px;font-size:14px;cursor:pointer;color:#fff;box-shadow:none;margin:0}
+.emoji-btn:hover{background:rgba(192,136,80,0.2);transform:none;box-shadow:none}
+</style>
+</head>
+<body>
+<a href="/game/" class="back-home">← 게임 목록</a>
+
+<div id="menu" class="screen">
+  <h1>💩 똥피하기 1:1</h1>
+  <p class="subtitle">하늘에서 떨어지는 똥을 피해라! · 더 오래 버티는 쪽이 승리</p>
+  <div class="btn-row">
+    <button class="big" onclick="showCreate()">🎮 방 만들기</button>
+    <button class="big secondary" onclick="showJoin()">🚪 방 참가하기</button>
+  </div>
+  <p class="hint">
+    <b>⬅ ➡ 또는 A D</b>로 좌우 이동 · HP 5에서 시작<br>
+    <b>💩 갈색 똥</b> 1 데미지 · <b>💩 큰똥</b> 2 데미지<br>
+    <b>❤️ 하트</b> 먹으면 +1 회복 · <b>✨ 황금똥</b> 먹으면 상대에게 폭탄 5개 보냄!<br>
+    상대가 먼저 죽으면 승리!
+  </p>
+</div>
+
+<div id="create" class="screen hidden">
+  <h1>방 만들기</h1>
+  <p class="subtitle">친구에게 이 코드를 알려주세요</p>
+  <div class="code-display" id="roomCode">------</div>
+  <div class="btn-row">
+    <button onclick="copyCode()">📋 코드 복사</button>
+    <p style="text-align:center;margin:20px 0" id="createStatus" class="blink">● 연결 대기 중...</p>
+    <button class="secondary" onclick="backToMenu()">← 돌아가기</button>
+  </div>
+</div>
+
+<div id="join" class="screen hidden">
+  <h1>방 참가</h1>
+  <p class="subtitle">6자리 방 코드를 입력하세요</p>
+  <div style="text-align:center;margin:20px 0">
+    <input type="text" id="codeInput" maxlength="6" placeholder="ABCDEF" autocomplete="off" />
+  </div>
+  <div class="btn-row">
+    <button class="big" onclick="doJoin()">✅ 참가하기</button>
+    <p id="joinStatus" style="text-align:center;margin:12px 0;min-height:20px"></p>
+    <button class="secondary" onclick="backToMenu()">← 돌아가기</button>
+  </div>
+</div>
+
+<div id="game" class="screen hidden">
+  <div id="game-container">
+    <div class="status-row">
+      <div class="player-stats my" id="myStats">
+        <div class="name">🟢 나</div>
+        <div class="hearts" id="myHearts">❤❤❤❤❤</div>
+        <div class="score">점수: <span id="myScore">0</span></div>
+      </div>
+      <div class="vs-divider">VS</div>
+      <div class="player-stats opp" id="oppStats">
+        <div class="name">🟠 상대</div>
+        <div class="hearts" id="oppHearts">❤❤❤❤❤</div>
+        <div class="score">점수: <span id="oppScore">0</span></div>
+      </div>
+    </div>
+    <div class="game-area">
+      <div class="field-container">
+        <div class="field-label my">🟢 내 필드</div>
+        <div class="field-wrap" id="myFieldWrap">
+          <canvas id="myField" class="field my" width="320" height="500"></canvas>
+        </div>
+      </div>
+      <div class="field-container">
+        <div class="field-label opp">🟠 상대 필드</div>
+        <div class="field-wrap" id="oppFieldWrap">
+          <canvas id="oppField" class="field opp" width="320" height="500"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="action-bar">
+      <div class="attack-counter">⚡ 공격 게이지: <span id="attackGauge">0</span></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button onclick="requestReset()">🔄 재대결</button>
+      <button id="muteBtn" onclick="toggleMute()" class="secondary">🔊 소리 켜짐</button>
+      <button class="danger" onclick="leaveGame()">🚪 나가기</button>
+    </div>
+    <p class="hint" id="connStatus">✓ 연결됨 · ⬅ ➡ 키 또는 마우스 클릭으로 이동</p>
+    <div class="chat-panel">
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="emoji-row">
+        <button class="emoji-btn" onclick="sendEmoji('💩')">💩</button>
+        <button class="emoji-btn" onclick="sendEmoji('😱')">😱</button>
+        <button class="emoji-btn" onclick="sendEmoji('🔥')">🔥</button>
+        <button class="emoji-btn" onclick="sendEmoji('🎉')">🎉</button>
+        <button class="emoji-btn" onclick="sendEmoji('😭')">😭</button>
+        <button class="emoji-btn" onclick="sendEmoji('🤣')">🤣</button>
+        <button class="emoji-btn" onclick="sendEmoji('GG')">GG</button>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="메시지 입력... (Enter로 전송)" maxlength="200" autocomplete="off" />
+        <button onclick="sendChat()">전송</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="winnerOverlay" class="overlay">
+  <div class="winner-text" id="winnerText">승리!</div>
+  <div class="winner-sub" id="winnerSub"></div>
+  <div class="btn-row">
+    <button onclick="closeWinner()">확인</button>
+  </div>
+</div>
+
+<div id="countdown" class="countdown"></div>
+<div id="toast"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+// ==================== CONFIG ====================
+const GAME_PREFIX='seoro-dodgepoop-v1';
+const W=320,H=500;
+const PLAYER_W=32,PLAYER_H=42;
+const PLAYER_SPEED=4.5;
+const GROUND_Y=H-30;
+const ATTACK_GAUGE_MAX=3;
+
+// ==================== STATE ====================
+let peer=null,conn=null,isHost=false;
+let myPlayer=null;
+let me={x:W/2-PLAYER_W/2,y:GROUND_Y-PLAYER_H,hp:5,maxhp:5,score:0,attackGauge:0,alive:true,iframe:0,hitFlash:0};
+let opp={hp:5,maxhp:5,score:0,alive:true};
+let myObjects=[]; // {x,y,vy,type,r}  type: poop, big, gold, heart
+let oppObjects=[]; // for visualization only (received from opp)
+let oppPlayer={x:W/2-PLAYER_W/2}; // visualization
+let gameStarted=false;
+let gameOver=false;
+let winner=null;
+let muted=localStorage.getItem('dodgepoop-muted')==='1';
+let lastSyncTime=0;
+let spawnTimer=0;
+let elapsedSec=0;
+let keys={};
+
+const myCv=document.getElementById('myField'),myCtx=myCv.getContext('2d');
+const oppCv=document.getElementById('oppField'),oppCtx=oppCv.getContext('2d');
+
+// ==================== UI ====================
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+function toast(msg,dur=2200){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>t.classList.remove('show'),dur);
+}
+function generateCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c='';for(let i=0;i<6;i++)c+=chars[Math.floor(Math.random()*chars.length)];
+  return c;
+}
+
+// ==================== AUDIO ====================
+let AC=null;
+function startAudio(){
+  if(AC)return;
+  try{AC=new(window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();if(!muted)startBGM();}catch(e){}
+}
+addEventListener('click',startAudio);
+addEventListener('keydown',startAudio);
+function tone(f,dur,type='square',vol=0.05,slideTo=null,t0=0){
+  if(!AC||muted)return;
+  const o=AC.createOscillator(),gn=AC.createGain();
+  const st=AC.currentTime+t0;
+  o.type=type;o.frequency.setValueAtTime(f,st);
+  if(slideTo)o.frequency.exponentialRampToValueAtTime(Math.max(1,slideTo),st+dur);
+  gn.gain.setValueAtTime(0,st);
+  gn.gain.linearRampToValueAtTime(vol,st+0.008);
+  gn.gain.exponentialRampToValueAtTime(0.0001,st+dur);
+  o.connect(gn);gn.connect(AC.destination);
+  o.start(st);o.stop(st+dur+0.02);
+}
+function noise(dur,vol=0.05,filter=2000,t0=0){
+  if(!AC||muted)return;
+  const bs=AC.createBufferSource(),buf=AC.createBuffer(1,Math.max(1,Math.floor(AC.sampleRate*dur)),AC.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);
+  bs.buffer=buf;
+  const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=filter;
+  const gn=AC.createGain();gn.gain.value=vol;
+  bs.connect(f);f.connect(gn);gn.connect(AC.destination);
+  bs.start(AC.currentTime+t0);
+}
+function sfxHit(){tone(180,0.18,'sawtooth',0.1,80);noise(0.1,0.08,1500);}
+function sfxBigHit(){tone(120,0.25,'sawtooth',0.12,60);noise(0.15,0.1,800);}
+function sfxHeart(){tone(880,0.06,'triangle',0.08);tone(1318,0.1,'triangle',0.07,null,0.06);tone(1760,0.15,'triangle',0.07,null,0.15);}
+function sfxGold(){
+  tone(700,0.08,'triangle',0.08,1200);
+  tone(1100,0.08,'triangle',0.08,1700,0.06);
+  tone(1500,0.12,'triangle',0.08,2100,0.12);
+  noise(0.1,0.04,8000,0.05);
+}
+function sfxAttack(){
+  tone(200,0.1,'sawtooth',0.1,500);
+  tone(400,0.15,'square',0.08,800,0.05);
+  noise(0.2,0.08,3000);
+}
+function sfxIncoming(){
+  tone(1200,0.08,'square',0.08);
+  setTimeout(()=>tone(1200,0.08,'square',0.08),120);
+}
+function sfxWin(){
+  tone(523,0.1,'triangle',0.07);
+  setTimeout(()=>tone(659,0.1,'triangle',0.07),100);
+  setTimeout(()=>tone(784,0.15,'triangle',0.07),200);
+  setTimeout(()=>tone(1047,0.25,'triangle',0.08),330);
+}
+function sfxLose(){
+  tone(400,0.15,'sawtooth',0.06,300);
+  setTimeout(()=>tone(250,0.25,'sawtooth',0.06,150),150);
+  setTimeout(()=>tone(150,0.3,'triangle',0.05,80),400);
+}
+function sfxStep(){tone(400,0.02,'square',0.02);}
+function sfxCount(){tone(880,0.1,'triangle',0.07);}
+function sfxStart(){tone(660,0.15,'triangle',0.08);setTimeout(()=>tone(880,0.15,'triangle',0.08),150);setTimeout(()=>tone(1320,0.25,'triangle',0.09),300);}
+
+// BGM
+const BGM={on:false,tNext:0,bar:0};
+const CHORDS=[
+  {r:130.81,p:[261.63,329.63,392.00],a:[523.25,659.25,783.99]},
+  {r:174.61,p:[261.63,349.23,440.00],a:[523.25,698.46,880.00]},
+  {r:110.00,p:[261.63,329.63,440.00],a:[523.25,659.25,880.00]},
+  {r:196.00,p:[246.94,293.66,392.00],a:[493.88,587.33,783.99]}
+];
+const MEL=[0,2,1,0, 2,1,2,0, 1,2,0,1, 2,0,1,2];
+function voice(f,t,d,type,v){
+  if(muted||!AC)return;
+  const o=AC.createOscillator(),gn=AC.createGain();
+  o.type=type;o.frequency.value=f;
+  gn.gain.setValueAtTime(0,t);
+  gn.gain.linearRampToValueAtTime(v,t+0.02);
+  gn.gain.linearRampToValueAtTime(v*0.6,t+d-0.1);
+  gn.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(gn);gn.connect(AC.destination);
+  o.start(t);o.stop(t+d+0.05);
+}
+function scheduleBGM(){
+  if(!BGM.on||!AC||muted)return;
+  const now=AC.currentTime;
+  while(BGM.tNext<now+2.5){
+    const c=CHORDS[BGM.bar%CHORDS.length];
+    const bd=1.8;
+    c.p.forEach(f=>voice(f,BGM.tNext,bd,'triangle',0.013));
+    voice(c.r,BGM.tNext,bd*0.9,'sine',0.024);
+    for(let i=0;i<8;i++){
+      const mi=MEL[(BGM.bar*8+i)%MEL.length];
+      voice(c.a[mi%3]*(mi>=3?2:1),BGM.tNext+i*bd/8,bd/8*0.9,'sine',0.02);
+    }
+    BGM.tNext+=bd;BGM.bar++;
+  }
+  setTimeout(scheduleBGM,400);
+}
+function startBGM(){if(BGM.on||!AC||muted)return;BGM.on=true;BGM.tNext=AC.currentTime+0.2;BGM.bar=0;scheduleBGM();}
+function stopBGM(){BGM.on=false;}
+function toggleMute(){
+  muted=!muted;
+  localStorage.setItem('dodgepoop-muted',muted?'1':'0');
+  const btn=document.getElementById('muteBtn');
+  if(muted){btn.innerHTML='🔇 소리 꺼짐';btn.classList.add('muted');stopBGM();}
+  else{btn.innerHTML='🔊 소리 켜짐';btn.classList.remove('muted');startAudio();if(AC)startBGM();}
+}
+
+// ==================== CONNECTION ====================
+function checkEnvironment(){
+  if(location.protocol==='file:'){
+    return '⚠ 로컬 파일(file://)로 열어서 작동하지 않습니다.\n\nNetlify에 배포하고 https:// URL로 접속하거나,\n로컬 서버를 띄워서 사용하세요.';
+  }
+  return null;
+}
+function showCreate(){
+  const envErr=checkEnvironment();
+  if(envErr){alert(envErr);return;}
+  showScreen('create');isHost=true;tryCreate();
+}
+function tryCreate(){
+  const code=generateCode();
+  document.getElementById('roomCode').textContent=code;
+  if(peer){try{peer.destroy();}catch(e){}}
+  console.log('[dodgepoop] Creating peer:',GAME_PREFIX+'-'+code);
+  peer=new Peer(GAME_PREFIX+'-'+code,{debug:1});
+  peer.on('open',id=>{
+    console.log('[dodgepoop] Peer open:',id);
+    document.getElementById('createStatus').innerHTML='<span class="blink">● 연결 대기 중...</span>';
+  });
+  peer.on('connection',c=>{
+    conn=c;setupConnection();myPlayer=0;
+    c.on('open',()=>{
+      conn.send({type:'hello'});
+      startGame();toast('상대방이 참가했습니다!');
+    });
+  });
+  peer.on('error',err=>{
+    console.error('[dodgepoop] Peer error:',err.type,err);
+    if(err.type==='unavailable-id')tryCreate();
+    else document.getElementById('createStatus').innerHTML='<span style="color:#f66">⚠ 오류: '+err.type+'<br><button onclick="tryCreate()">🔄 재시도</button></span>';
+  });
+}
+function showJoin(){
+  const envErr=checkEnvironment();
+  if(envErr){alert(envErr);return;}
+  showScreen('join');
+  document.getElementById('codeInput').value='';
+  document.getElementById('joinStatus').textContent='';
+  setTimeout(()=>document.getElementById('codeInput').focus(),100);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!document.getElementById('join').classList.contains('hidden'))doJoin();
+});
+function doJoin(){
+  const code=document.getElementById('codeInput').value.toUpperCase().trim();
+  if(code.length!==6){
+    document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 코드는 6자리여야 합니다</span>';return;
+  }
+  isHost=false;
+  document.getElementById('joinStatus').innerHTML='<span class="blink">⏳ 연결 중... (최대 10초)</span>';
+  if(peer){try{peer.destroy();}catch(e){}}
+  peer=new Peer({debug:1});
+  peer.on('open',id=>{
+    conn=peer.connect(GAME_PREFIX+'-'+code,{reliable:true,serialization:'json'});
+    let connected=false;
+    const timer=setTimeout(()=>{
+      if(!connected){
+        document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 방을 찾을 수 없습니다.<br><button onclick="doJoin()">🔄 재시도</button></span>';
+        try{conn.close();}catch(e){}
+      }
+    },10000);
+    conn.on('open',()=>{
+      connected=true;clearTimeout(timer);
+      setupConnection();myPlayer=1;
+      startGame();toast('연결되었습니다!');
+    });
+    conn.on('error',err=>{
+      clearTimeout(timer);
+      document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 연결 실패</span>';
+    });
+  });
+  peer.on('error',err=>{
+    if(err.type==='peer-unavailable'){
+      document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 해당 코드의 방이 없습니다.</span>';
+    } else document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 오류: '+err.type+'<br><button onclick="doJoin()">🔄 재시도</button></span>';
+  });
+}
+function setupConnection(){
+  conn.on('data',handleMsg);
+  conn.on('close',()=>{
+    toast('상대방의 연결이 끊어졌습니다',4000);
+    document.getElementById('connStatus').innerHTML='<span style="color:#f66">⚠ 연결 끊김</span>';
+  });
+}
+function sendMsg(d){if(conn&&conn.open)conn.send(d);}
+function handleMsg(data){
+  if(data.type==='sync'){
+    // Periodic state sync from opponent
+    opp.hp=data.hp;
+    opp.score=data.score;
+    opp.alive=data.alive;
+    oppPlayer.x=data.px;
+    oppObjects=data.objs||[];
+    updateStatusUI();
+  } else if(data.type==='attack'){
+    // Opponent sent us extra poops
+    spawnAttack(data.count||5);
+    showAttackWarning();
+    sfxIncoming();
+    toast('⚠ 상대 공격! 똥 폭탄 날아옴',1500);
+  } else if(data.type==='died'){
+    opp.alive=false;
+    if(me.alive){
+      winner=myPlayer;
+      endGame();
+    }
+  } else if(data.type==='resetReq'){
+    if(confirm('상대방이 재대결을 요청했습니다. 수락?')){
+      sendMsg({type:'resetAck',accept:true});
+      resetGame();
+    } else sendMsg({type:'resetAck',accept:false});
+  } else if(data.type==='resetAck'){
+    if(data.accept){resetGame();toast('재대결 시작!');}
+    else toast('상대방이 거절했습니다');
+  } else if(data.type==='chat'){
+    addChatMessage('상대',data.text,false);
+  }
+}
+
+// ==================== GAME ====================
+function startGame(){
+  showScreen('game');
+  startAudio();
+  const btn=document.getElementById('muteBtn');
+  if(btn){
+    if(muted){btn.innerHTML='🔇 소리 꺼짐';btn.classList.add('muted');}
+    else btn.innerHTML='🔊 소리 켜짐';
+  }
+  resetGame();
+}
+function resetGame(){
+  me={x:W/2-PLAYER_W/2,y:GROUND_Y-PLAYER_H,hp:5,maxhp:5,score:0,attackGauge:0,alive:true,iframe:0,hitFlash:0};
+  opp={hp:5,maxhp:5,score:0,alive:true};
+  myObjects=[];
+  oppObjects=[];
+  oppPlayer={x:W/2-PLAYER_W/2};
+  gameOver=false;
+  winner=null;
+  spawnTimer=0;
+  elapsedSec=0;
+  document.getElementById('winnerOverlay').classList.remove('show');
+  updateStatusUI();
+  // 3-2-1 countdown then start
+  gameStarted=false;
+  countdown(3);
+}
+function countdown(n){
+  const cd=document.getElementById('countdown');
+  if(n>0){
+    cd.textContent=n;
+    cd.classList.remove('show');
+    void cd.offsetWidth;
+    cd.classList.add('show');
+    sfxCount();
+    setTimeout(()=>countdown(n-1),900);
+  } else {
+    cd.textContent='시작!';
+    cd.classList.remove('show');
+    void cd.offsetWidth;
+    cd.classList.add('show');
+    sfxStart();
+    gameStarted=true;
+    setTimeout(()=>cd.classList.remove('show'),700);
+  }
+}
+function requestReset(){
+  if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
+  sendMsg({type:'resetReq'});
+  toast('재대결 요청을 보냈습니다');
+}
+function leaveGame(){
+  if(confirm('게임을 나가시겠습니까?'))backToMenu();
+}
+function backToMenu(){
+  if(conn){try{conn.close();}catch(e){}conn=null;}
+  if(peer){peer.destroy();peer=null;}
+  showScreen('menu');
+  document.getElementById('winnerOverlay').classList.remove('show');
+}
+function copyCode(){
+  const code=document.getElementById('roomCode').textContent;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(code).then(()=>toast('복사됨: '+code));
+  } else toast('코드: '+code);
+}
+
+// ==================== SPAWN ====================
+function spawnObject(){
+  const r=Math.random();
+  let type;
+  if(r<0.04 && elapsedSec>10)type='gold';
+  else if(r<0.1)type='heart';
+  else if(r<0.25 && elapsedSec>5)type='big';
+  else type='poop';
+  const sz=type==='big'?32:type==='gold'?26:24;
+  myObjects.push({
+    x:Math.random()*(W-sz),
+    y:-sz,
+    vy:1+Math.random()*1.5+elapsedSec*0.04, // speed up over time
+    type,
+    sz,
+    rot:Math.random()*Math.PI*2,
+    rotV:(Math.random()-0.5)*0.1
+  });
+}
+function spawnAttack(count){
+  // Drop multiple poops from top simultaneously
+  for(let i=0;i<count;i++){
+    setTimeout(()=>{
+      const big=Math.random()<0.5;
+      myObjects.push({
+        x:Math.random()*(W-32),
+        y:-32,
+        vy:2.5+Math.random()*1.5,
+        type:big?'big':'poop',
+        sz:big?32:24,
+        rot:Math.random()*Math.PI*2,
+        rotV:(Math.random()-0.5)*0.15,
+        attack:true
+      });
+    },i*100);
+  }
+}
+function showAttackWarning(){
+  const wrap=document.getElementById('myFieldWrap');
+  const flash=document.createElement('div');
+  flash.className='warning-flash';
+  wrap.appendChild(flash);
+  setTimeout(()=>flash.remove(),400);
+}
+
+// ==================== UPDATE ====================
+let lastTime=performance.now();
+function update(dtSec){
+  if(!gameStarted||gameOver||!me.alive)return;
+  elapsedSec+=dtSec;
+  // Player movement
+  let dx=0;
+  if(keys['arrowleft']||keys['a'])dx-=1;
+  if(keys['arrowright']||keys['d'])dx+=1;
+  me.x+=dx*PLAYER_SPEED;
+  if(me.x<0)me.x=0;
+  if(me.x>W-PLAYER_W)me.x=W-PLAYER_W;
+  // Score (1 per second)
+  me.score+=dtSec;
+  // Spawn
+  spawnTimer-=dtSec;
+  const spawnRate=Math.max(0.25,0.85-elapsedSec*0.012); // Faster over time
+  if(spawnTimer<=0){
+    spawnObject();
+    spawnTimer=spawnRate;
+  }
+  // Update objects
+  for(let i=myObjects.length-1;i>=0;i--){
+    const o=myObjects[i];
+    o.y+=o.vy;
+    o.rot+=o.rotV;
+    if(o.y>H+50){myObjects.splice(i,1);continue;}
+    // Collision with player
+    if(o.y+o.sz>=me.y && o.y<=me.y+PLAYER_H && o.x+o.sz>=me.x+4 && o.x<=me.x+PLAYER_W-4){
+      onCollide(o);
+      myObjects.splice(i,1);
+    }
+  }
+  // iframe decay
+  if(me.iframe>0)me.iframe-=dtSec;
+  if(me.hitFlash>0)me.hitFlash-=dtSec;
+  // Sync to opponent (~10Hz)
+  if(performance.now()-lastSyncTime>100){
+    lastSyncTime=performance.now();
+    sendMsg({type:'sync',hp:me.hp,score:Math.floor(me.score),alive:me.alive,px:me.x,
+      objs:myObjects.slice(0,30).map(o=>({x:o.x,y:o.y,sz:o.sz,type:o.type,rot:o.rot}))});
+  }
+}
+function onCollide(o){
+  if(o.type==='heart'){
+    if(me.hp<10){me.hp++;}
+    me.score+=5;
+    sfxHeart();
+    showFloatText('+1 ❤',o.x,o.y);
+    return;
+  }
+  if(o.type==='gold'){
+    me.attackGauge++;
+    me.score+=10;
+    sfxGold();
+    showFloatText('⚡ 공격!',o.x,o.y);
+    if(me.attackGauge>=ATTACK_GAUGE_MAX){
+      me.attackGauge=0;
+      sendMsg({type:'attack',count:5});
+      sfxAttack();
+      toast('💥 공격 발사! 상대에게 똥 폭탄 5개!',1800);
+    }
+    updateStatusUI();
+    return;
+  }
+  if(me.iframe>0)return;
+  const dmg=(o.type==='big')?2:1;
+  me.hp-=dmg;
+  me.iframe=0.6;
+  me.hitFlash=0.3;
+  if(o.type==='big')sfxBigHit();else sfxHit();
+  // Status flash
+  document.getElementById('myStats').classList.add('hit');
+  setTimeout(()=>document.getElementById('myStats').classList.remove('hit'),300);
+  updateStatusUI();
+  if(me.hp<=0){
+    me.alive=false;
+    sendMsg({type:'died'});
+    sfxLose();
+    if(!opp.alive){winner=null;}
+    else{winner=1-myPlayer;}
+    endGame();
+  }
+}
+function endGame(){
+  gameOver=true;
+  setTimeout(showWinner,800);
+}
+function showWinner(){
+  const o=document.getElementById('winnerOverlay');
+  const t=document.getElementById('winnerText');
+  const s=document.getElementById('winnerSub');
+  if(winner===null){
+    t.textContent='🤝 무승부';
+  } else if(winner===myPlayer){
+    t.textContent='🎉 승리!';
+    sfxWin();
+  } else {
+    t.textContent='😭 패배';
+  }
+  s.innerHTML='내 점수: '+Math.floor(me.score)+' · 상대 점수: '+Math.floor(opp.score)+'<br>생존 시간: '+Math.floor(elapsedSec)+'초';
+  o.classList.add('show');
+}
+function closeWinner(){document.getElementById('winnerOverlay').classList.remove('show');}
+
+// ==================== RENDER ====================
+function drawField(ctx,player,objs,playerData){
+  // Sky gradient (already in canvas bg)
+  ctx.clearRect(0,0,W,H);
+  // Background
+  const grd=ctx.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#87ceeb');grd.addColorStop(0.6,'#bde4f5');grd.addColorStop(1,'#f5e6c8');
+  ctx.fillStyle=grd;
+  ctx.fillRect(0,0,W,H);
+  // Clouds
+  ctx.fillStyle='rgba(255,255,255,0.7)';
+  const t=performance.now()/100;
+  for(let i=0;i<3;i++){
+    const cx=((i*120+t*0.5)%(W+120))-60;
+    const cy=30+i*40;
+    ctx.beginPath();
+    ctx.arc(cx,cy,12,0,Math.PI*2);
+    ctx.arc(cx+10,cy-5,14,0,Math.PI*2);
+    ctx.arc(cx+22,cy,11,0,Math.PI*2);
+    ctx.fill();
+  }
+  // Ground
+  ctx.fillStyle='#5a9a3a';
+  ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
+  ctx.fillStyle='#7abb4a';
+  ctx.fillRect(0,GROUND_Y,W,3);
+  // Grass tufts
+  ctx.fillStyle='#3a7a1a';
+  for(let i=0;i<W;i+=18){
+    ctx.fillRect(i+(i*7)%4,GROUND_Y-2,1,3);
+    ctx.fillRect(i+3+(i*11)%4,GROUND_Y-3,1,4);
+  }
+  // Objects
+  for(const o of objs){
+    drawObject(ctx,o);
+  }
+  // Player
+  drawPlayer(ctx,player,playerData);
+}
+function drawObject(ctx,o){
+  ctx.save();
+  ctx.translate(o.x+o.sz/2,o.y+o.sz/2);
+  if(o.rot)ctx.rotate(o.rot);
+  if(o.type==='heart'){
+    drawHeart(ctx,o.sz);
+  } else if(o.type==='gold'){
+    drawPoop(ctx,o.sz,'#ffd700','#b88a00','#fff');
+    // Sparkle
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(-o.sz/3,-o.sz/4,1.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(o.sz/4,-o.sz/3,1,0,Math.PI*2);ctx.fill();
+  } else if(o.type==='big'){
+    drawPoop(ctx,o.sz,'#3a1f10','#5a3a20','#8b5a2b');
+  } else {
+    drawPoop(ctx,o.sz,'#8b4513','#5a2810','#a0703a');
+  }
+  ctx.restore();
+}
+function drawPoop(ctx,sz,c1,c2,c3){
+  // Stylized poop swirl
+  const r=sz/2;
+  // Bottom blob
+  ctx.fillStyle=c2;
+  ctx.beginPath();ctx.ellipse(0,r*0.4,r*0.95,r*0.55,0,0,Math.PI*2);ctx.fill();
+  // Mid blob
+  ctx.fillStyle=c1;
+  ctx.beginPath();ctx.ellipse(0,r*0.05,r*0.75,r*0.45,0,0,Math.PI*2);ctx.fill();
+  // Top blob
+  ctx.beginPath();ctx.ellipse(0,-r*0.35,r*0.5,r*0.35,0,0,Math.PI*2);ctx.fill();
+  // Tip
+  ctx.beginPath();ctx.ellipse(0,-r*0.65,r*0.25,r*0.18,0,0,Math.PI*2);ctx.fill();
+  // Highlights
+  ctx.fillStyle=c3;
+  ctx.beginPath();ctx.ellipse(-r*0.4,-r*0.05,r*0.15,r*0.08,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(r*0.2,r*0.45,r*0.1,r*0.05,0,0,Math.PI*2);ctx.fill();
+  // Eyes (cute poop)
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(-r*0.25,-r*0.2,r*0.16,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(r*0.25,-r*0.2,r*0.16,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#000';
+  ctx.beginPath();ctx.arc(-r*0.22,-r*0.18,r*0.08,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(r*0.28,-r*0.18,r*0.08,0,Math.PI*2);ctx.fill();
+  // Smile
+  ctx.strokeStyle='#000';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(0,-r*0.05,r*0.15,0.2,Math.PI-0.2);ctx.stroke();
+}
+function drawHeart(ctx,sz){
+  const r=sz/2;
+  ctx.fillStyle='#f44';
+  ctx.beginPath();
+  ctx.moveTo(0,r*0.6);
+  ctx.bezierCurveTo(r*1.1,r*0.1,r*0.7,-r*0.7,0,-r*0.1);
+  ctx.bezierCurveTo(-r*0.7,-r*0.7,-r*1.1,r*0.1,0,r*0.6);
+  ctx.fill();
+  ctx.strokeStyle='#a00';ctx.lineWidth=1;ctx.stroke();
+  // Highlight
+  ctx.fillStyle='rgba(255,255,255,0.5)';
+  ctx.beginPath();ctx.ellipse(-r*0.3,-r*0.25,r*0.18,r*0.1,-0.5,0,Math.PI*2);ctx.fill();
+}
+function drawPlayer(ctx,player,playerData){
+  const x=player.x,y=player.y;
+  const flashing=playerData&&(playerData.iframe>0&&Math.floor(performance.now()/80)%2===0);
+  if(flashing)ctx.globalAlpha=0.4;
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.beginPath();ctx.ellipse(x+PLAYER_W/2,y+PLAYER_H+2,PLAYER_W/2-2,4,0,0,Math.PI*2);ctx.fill();
+  // Body (yellow shirt)
+  ctx.fillStyle='#ffd93d';
+  ctx.fillRect(x+6,y+18,PLAYER_W-12,18);
+  ctx.fillStyle='#e6b800';
+  ctx.fillRect(x+6,y+18,PLAYER_W-12,2);
+  // Pants (dark blue)
+  ctx.fillStyle='#2b3a55';
+  ctx.fillRect(x+8,y+34,8,8);
+  ctx.fillRect(x+PLAYER_W-16,y+34,8,8);
+  // Shoes
+  ctx.fillStyle='#1a1a2a';
+  ctx.fillRect(x+7,y+40,10,2);
+  ctx.fillRect(x+PLAYER_W-17,y+40,10,2);
+  // Arms
+  ctx.fillStyle='#ffd93d';
+  ctx.fillRect(x+2,y+19,4,12);
+  ctx.fillRect(x+PLAYER_W-6,y+19,4,12);
+  // Hands
+  ctx.fillStyle='#ffd4a3';
+  ctx.fillRect(x+2,y+30,4,4);
+  ctx.fillRect(x+PLAYER_W-6,y+30,4,4);
+  // Neck
+  ctx.fillStyle='#ffd4a3';
+  ctx.fillRect(x+13,y+15,6,3);
+  // Head
+  ctx.fillStyle='#ffd4a3';
+  ctx.fillRect(x+8,y+2,16,16);
+  // Hair
+  ctx.fillStyle='#3d2817';
+  ctx.fillRect(x+8,y,16,5);
+  ctx.fillRect(x+7,y+3,2,4);
+  ctx.fillRect(x+23,y+3,2,4);
+  // Eyes
+  if(playerData&&playerData.hp<=2){
+    // Worried eyes (X)
+    ctx.strokeStyle='#000';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(x+11,y+8);ctx.lineTo(x+14,y+11);
+    ctx.moveTo(x+14,y+8);ctx.lineTo(x+11,y+11);
+    ctx.moveTo(x+18,y+8);ctx.lineTo(x+21,y+11);
+    ctx.moveTo(x+21,y+8);ctx.lineTo(x+18,y+11);
+    ctx.stroke();
+    // Sad mouth
+    ctx.beginPath();ctx.arc(x+16,y+15,2,Math.PI,Math.PI*2);ctx.stroke();
+  } else {
+    // Normal eyes
+    ctx.fillStyle='#000';
+    ctx.fillRect(x+12,y+9,2,2);
+    ctx.fillRect(x+18,y+9,2,2);
+    // Mouth
+    ctx.fillRect(x+14,y+14,4,1);
+  }
+  ctx.globalAlpha=1;
+}
+function showFloatText(text,x,y){
+  // No-op for now (could add float text animations)
+}
+
+function updateStatusUI(){
+  // Hearts
+  const myHeartsEl=document.getElementById('myHearts');
+  let myH='';
+  for(let i=0;i<Math.max(me.maxhp,me.hp);i++){
+    if(i<me.hp)myH+='<span class="heart">❤</span>';
+    else myH+='<span class="heart empty">♡</span>';
+  }
+  myHeartsEl.innerHTML=myH;
+  const oppHeartsEl=document.getElementById('oppHearts');
+  let oppH='';
+  for(let i=0;i<5;i++){
+    if(i<opp.hp)oppH+='<span class="heart">❤</span>';
+    else oppH+='<span class="heart empty">♡</span>';
+  }
+  oppHeartsEl.innerHTML=oppH;
+  document.getElementById('myScore').textContent=Math.floor(me.score);
+  document.getElementById('oppScore').textContent=Math.floor(opp.score);
+  document.getElementById('attackGauge').textContent=me.attackGauge+'/'+ATTACK_GAUGE_MAX;
+  // Dead state
+  document.getElementById('myStats').classList.toggle('dead',!me.alive);
+  document.getElementById('oppStats').classList.toggle('dead',!opp.alive);
+}
+
+// ==================== INPUT ====================
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  keys[k]=true;
+  if(['arrowleft','arrowright','arrowup','arrowdown',' '].includes(k))e.preventDefault();
+});
+addEventListener('keyup',e=>{
+  keys[e.key.toLowerCase()]=false;
+});
+// Mouse/touch movement on my field
+function moveByPointer(e){
+  if(!gameStarted||!me.alive)return;
+  const rect=myCv.getBoundingClientRect();
+  const evt=e.touches?e.touches[0]:e;
+  const mx=(evt.clientX-rect.left)*myCv.width/rect.width;
+  me.x=Math.max(0,Math.min(W-PLAYER_W,mx-PLAYER_W/2));
+}
+myCv.addEventListener('mousemove',moveByPointer);
+myCv.addEventListener('touchmove',e=>{e.preventDefault();moveByPointer(e);},{passive:false});
+myCv.addEventListener('touchstart',e=>{e.preventDefault();moveByPointer(e);},{passive:false});
+
+// ==================== MAIN LOOP ====================
+function loop(){
+  const now=performance.now();
+  const dt=Math.min((now-lastTime)/1000,0.05);
+  lastTime=now;
+  update(dt);
+  drawField(myCtx,me,myObjects,me);
+  drawField(oppCtx,oppPlayer,oppObjects,opp);
+  // Update score display occasionally
+  if(Math.floor(now/100)%5===0)updateStatusUI();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ==================== CHAT ====================
+function escapeHTML(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));}
+function addChatMessage(sender,text,isMine,isSystem){
+  const box=document.getElementById('chatMessages');
+  if(!box)return;
+  const div=document.createElement('div');
+  div.className='chat-msg '+(isSystem?'system':(isMine?'mine':'theirs'));
+  if(isSystem)div.textContent=text;
+  else div.innerHTML='<span class="sender">'+escapeHTML(sender)+':</span> '+escapeHTML(text);
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
+  while(box.children.length>100)box.removeChild(box.firstChild);
+}
+function sendChat(){
+  const input=document.getElementById('chatInput');
+  const msg=input.value.trim();
+  if(!msg)return;
+  if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
+  sendMsg({type:'chat',text:msg});
+  addChatMessage('나',msg,true);
+  input.value='';input.focus();
+}
+function sendEmoji(emoji){
+  if(!conn||!conn.open){toast('연결이 끊어졌습니다');return;}
+  sendMsg({type:'chat',text:emoji});
+  addChatMessage('나',emoji,true);
+}
+setTimeout(()=>{
+  const ci=document.getElementById('chatInput');
+  if(ci&&!ci._bound){
+    ci._bound=true;
+    ci.addEventListener('keydown',e=>{if(e.key==='Enter'){e.stopPropagation();sendChat();}});
+  }
+},100);
+</script>
+</body>
+</html>

@@ -511,6 +511,11 @@ function startGame(){
   startAudio();
 }
 function resetGame(){
+  // Winner of last game becomes black (선/first move)
+  if(winner===1||winner===2){
+    myColor=(winner===myColor)?1:2;
+    toast(myColor===1?'🏆 이전 승자! 흑(선) 잡습니다':'⚪ 백 잡습니다',2500);
+  }
   board=Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill(0));
   currentPlayer=1;
   winner=0;

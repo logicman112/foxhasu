@@ -473,6 +473,11 @@ function startGame(){
   resetGame();
 }
 function resetGame(){
+  // Winner of last game becomes white (선/first move)
+  if(winner==='w'||winner==='b'){
+    myColor=(winner===myColor)?'w':'b';
+    toast(myColor==='w'?'🏆 이전 승자! 백(선) 잡습니다':'⚫ 흑 잡습니다',2500);
+  }
   board=initialBoard();
   currentPlayer='w';
   selected=null;validMoves=[];lastMove=null;
