@@ -35,10 +35,13 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
 .player-hud .name{font-weight:bold;font-size:13px}
 .player-hud.me .name{color:#5a8aff}
 .player-hud.opp .name{color:#ff5a8a}
-.hp-bar{height:16px;background:rgba(0,0,0,0.6);border-radius:8px;overflow:hidden;position:relative;margin:2px 0;border:1px solid rgba(255,255,255,0.2)}
-.hp-fill{height:100%;background:linear-gradient(90deg,#4fdd4f,#7dff7d);transition:width 0.2s;border-radius:8px}
+.hp-bar{height:16px;background:linear-gradient(180deg,#222,#0a0a14);border-radius:8px;overflow:hidden;position:relative;margin:2px 0;border:1px solid rgba(255,255,255,0.25);box-shadow:inset 0 1px 2px rgba(0,0,0,0.6),0 1px 0 rgba(255,255,255,0.05)}
+.hp-fill{height:100%;background:linear-gradient(90deg,#4fdd4f,#7dff7d);transition:width 0.35s cubic-bezier(0.4,0,0.2,1);border-radius:8px;position:relative;z-index:2}
 .hp-fill.warning{background:linear-gradient(90deg,#ff8a3d,#ffbe60)}
-.hp-fill.critical{background:linear-gradient(90deg,#ff3050,#ff6080);animation:hpPulse 0.6s infinite}
+.hp-fill.critical{background:linear-gradient(90deg,#ff3050,#ff6080);animation:hpPulse 0.6s infinite;box-shadow:0 0 8px rgba(255,80,80,0.5)}
+.hp-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.45),transparent 50%);border-radius:8px;pointer-events:none}
+.hp-trail{position:absolute;top:0;height:100%;background:linear-gradient(90deg,#ffd93d,#ffb060);transition:width 0.7s cubic-bezier(0.4,0,0.2,1) 0.15s;border-radius:8px;z-index:1;left:0}
+.player-hud.opp .hp-trail{right:0;left:auto;background:linear-gradient(-90deg,#ffd93d,#ffb060)}
 .player-hud.opp .hp-fill{float:right}
 @keyframes hpPulse{50%{filter:brightness(1.4)}}
 .hp-bar .hp-num{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;font-size:11px;font-weight:bold;text-shadow:0 0 3px #000}
@@ -120,7 +123,7 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
     <b>🎮 조작</b><br>
     이동: <kbd>←</kbd><kbd>→</kbd> · 앉기: <kbd>↓</kbd> · 점프(2단): <kbd>SPACE</kbd><br>
     펀치(무기 포함): <kbd>A</kbd> · 킥: <kbd>S</kbd> · 방패: <kbd>L</kbd>(아이템) · 뒤로=가드<br>
-    💨 <b>대쉬</b>: 앞방향 빠르게 2번 짧게 / <b>달리기</b>: 앞방향 2번 후 유지<br>
+    💨 <b>대쉬</b>: 앞 또는 <b>뒤</b>로 빠르게 2번 / <b>달리기</b>: 앞 2번 후 유지<br>
     🦘 <b>슈퍼점프</b>: 대쉬·달리기 중 SPACE → 멀리뛰기<br>
     🔥 <b>아도겐</b>: <kbd>뒤</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd> (충돌하면 상쇄!)<br>
     ⚡ <b>워류겐</b>: <kbd>앞</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd><br>
@@ -131,10 +134,9 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
     ⏱ 한 판 2분 · 3판 2선승제
   </div>
   <div style="font-size:12px;color:#888;text-align:center;margin-top:10px;line-height:1.6">
-    ⚔ <b>검</b>(A=킥 사정/S=더 길게/워류겐O · 검+아도겐 = <b style="color:#cce8ff">三千世界 10연참(킥 ×3 사정)</b>)<br>
-    🎩 <b>모자</b>(데미지 +3 · 아우라) · 👢 <b>부츠</b>(속도+/2단점프)<br>
-    🛡 <b>방패</b>(L로 막기) · 🧥 <b>자켓</b>(HP+33% · <b>SPACE 홀드 2초 비행</b>)<br>
-    💡 <b>↓ 앉기</b>로 아도겐 회피 가능!
+    ⚔ <b>검</b>(A=킥 사정/S=더 길게/워류겐O · 검+아도겐 = <b style="color:#cce8ff">三千世界 10연참</b>)<br>
+    🎩 <b>모자</b>(데미지 +3) · 👢 <b>부츠</b>(속도+/2단점프) · 🛡 <b>방패</b>(데미지 -33% · 지직 오라)<br>
+    🧥 <b>자켓</b>(HP+33% · SPACE 홀드 2초 비행) · <b>↓ 앉기</b>로 아도겐 회피
   </div>
 </div>
 
@@ -166,7 +168,7 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
   <div class="top-hud">
     <div class="player-hud me">
       <div class="name">🟦 나 <span id="myName"></span></div>
-      <div class="hp-bar"><div class="hp-fill" id="myHp"></div><div class="hp-num" id="myHpNum">100</div></div>
+      <div class="hp-bar"><div class="hp-trail" id="myHpTrail"></div><div class="hp-fill" id="myHp"></div><div class="hp-num" id="myHpNum">100</div></div>
       <div class="items" id="myItems"></div>
       <div class="rounds">⭐ <span id="myRounds">0</span> / 2</div>
     </div>
@@ -176,7 +178,7 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
     </div>
     <div class="player-hud opp">
       <div class="name"><span id="oppName"></span> 상대 🟥</div>
-      <div class="hp-bar"><div class="hp-fill" id="oppHp"></div><div class="hp-num" id="oppHpNum">100</div></div>
+      <div class="hp-bar"><div class="hp-trail" id="oppHpTrail"></div><div class="hp-fill" id="oppHp"></div><div class="hp-num" id="oppHpNum">100</div></div>
       <div class="items" id="oppItems"></div>
       <div class="rounds">⭐ <span id="oppRounds">0</span> / 2</div>
     </div>
@@ -725,16 +727,19 @@ function updateMe(dt){
   // Crouching: hold ↓ on ground, while not attacking/hit
   me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick'].includes(me.state);
 
-  // ===== Double-tap forward detection (run/dash) =====
+  // ===== Double-tap detection (forward/back dash) =====
   const nowMs=performance.now();
   const fwdKey=me.facing>0?KB.right:KB.left;
   const backKey=me.facing>0?KB.left:KB.right;
-  if(KP[fwdKey] && me.onGround && !['hit','hadouken','shoryuken','samchun','spinkick'].includes(me.state)){
-    if(nowMs-me.lastFwdTapTime<DBL_TAP_WINDOW){
-      // Double tap → start dash burst
+  const skipDash=['hit','hadouken','shoryuken','samchun','spinkick'].includes(me.state);
+  // Forward dash (must be CONSECUTIVE forward presses without down/back in between)
+  if(KP[fwdKey] && me.onGround && !skipDash){
+    const hist=me.inputHistory;
+    const prevEntry=hist.length>=2?hist[hist.length-2]:null;
+    const isCleanDouble=prevEntry&&prevEntry.dir==='forward'&&(nowMs-prevEntry.t)<DBL_TAP_WINDOW;
+    if(isCleanDouble){
       me.dashTime=DASH_TIME;
-      me.lastFwdTapTime=0; // consumed
-      // CRITICAL: Clear input history so dash 'forward's don't pollute special detection
+      me.dashDir=1; // forward
       me.inputHistory=[];
       sfxDjump();
       for(let i=0;i<4;i++){
@@ -742,26 +747,39 @@ function updateMe(dt){
           vx:-me.facing*(2+Math.random()*2),vy:(Math.random()-0.5)*1.5,
           life:14,maxLife:14,type:'smoke',size:5,gravity:0});
       }
-    } else {
-      me.lastFwdTapTime=nowMs;
+    }
+  }
+  // Backward dash (consecutive back presses)
+  if(KP[backKey] && me.onGround && !skipDash){
+    const hist=me.inputHistory;
+    const prevEntry=hist.length>=2?hist[hist.length-2]:null;
+    const isCleanDouble=prevEntry&&prevEntry.dir==='back'&&(nowMs-prevEntry.t)<DBL_TAP_WINDOW;
+    if(isCleanDouble){
+      me.dashTime=DASH_TIME;
+      me.dashDir=-1; // backward
+      me.inputHistory=[];
+      sfxDjump();
+      for(let i=0;i<4;i++){
+        spawnP({x:me.x+me.facing*10,y:me.y-20-Math.random()*30,
+          vx:me.facing*(2+Math.random()*2),vy:(Math.random()-0.5)*1.5,
+          life:14,maxLife:14,type:'smoke',size:5,gravity:0});
+      }
     }
   }
   // If forward released, end run mode
   if(!held(fwdKey))me.running=false;
-  // If holding back, cancel dash/run
-  if(held(backKey)){me.dashTime=0;me.running=false;}
 
   // Apply dash physics
   if(me.dashTime>0&&me.onGround&&me.state!=='hit'){
     me.dashTime-=dt;
-    me.vx=me.facing*DASH_VX;
-    // Clean speed line particles only (no afterimage flicker)
+    const ddir=me.dashDir||1;
+    me.vx=me.facing*DASH_VX*ddir;
     if(Math.random()<0.5){
-      spawnP({x:me.x-me.facing*8,y:me.y-30-Math.random()*30,
-        vx:-me.facing*1.5,vy:0,life:10,maxLife:10,type:'smoke',
+      spawnP({x:me.x-me.facing*8*ddir,y:me.y-30-Math.random()*30,
+        vx:-me.facing*1.5*ddir,vy:0,life:10,maxLife:10,type:'smoke',
         size:4,gravity:0});
     }
-    if(me.dashTime<=0&&held(fwdKey)){
+    if(me.dashTime<=0&&held(fwdKey)&&ddir>0){
       me.running=true;
     }
   }
@@ -772,11 +790,11 @@ function updateMe(dt){
     if(held(KB.right))dx+=1;
     let speed=getSpeed(me);
     if(me.crouching)dx*=0.5;
-    // Run mode boost (forward only)
     if(me.running&&dx!==0&&Math.sign(dx)===me.facing)speed*=RUN_MULT;
     me.vx=dx*speed;
   } else if(me.dashTime<=0) {
-    me.vx*=0.85;
+    // In attack states: only decay vx on ground (preserve air momentum)
+    if(me.onGround) me.vx*=0.85;
   }
   // Jump
   if(pressed(KB.up)&&me.jumps<getMaxJumps(me)&&!me.blocking&&me.state!=='hit'){
@@ -864,6 +882,25 @@ function updateMe(dt){
   else if(me.state==='hit'&&me.stateTime>(me.hitDuration||0.3))me.state='idle';
   if(me.state==='shoryuken'&&me.stateTime<0.05){
     me.vy=-11;me.vx=me.facing*3.5;me.onGround=false;
+  }
+  // Spin kick phases: 0-0.3s spin in place, 0.3-1.2s advance forward
+  if(me.state==='spinkick'){
+    if(me.stateTime<0.3){
+      me.vx=0;
+      // Hover briefly during charge
+      if(me.y<GROUND_Y){me.vy=Math.min(me.vy+0.2,1);}
+    } else if(me.stateTime<1.15){
+      me.vx=me.facing*4.5;
+    } else {
+      me.vx*=0.6;
+    }
+    // Continuous blue flame trail
+    if(Math.random()<0.7){
+      spawnP({x:me.x+(Math.random()-0.5)*16,y:me.y-15-Math.random()*40,
+        vx:(Math.random()-0.5)*1.5,vy:(Math.random()-0.5)*1.5-0.3,
+        life:14,maxLife:14,type:'energy',
+        color:'rgba(70,130,255,0.95)',size:3+Math.random()*2,gravity:-0.02});
+    }
   }
   // Shoryuken flame trail (no afterimages)
   if(me.state==='shoryuken'&&me.stateTime<0.4){
@@ -981,55 +1018,54 @@ function sfxSpinKick(){
   noise(0.06,0.04,3000);
 }
 function startSpinKick(){
-  // Forward → down → back + S = 회전 발차기 (spin kick)
+  // 앞→↓→뒤 + S = 회전 발차기
+  // Phase 1 (0-0.3s): spin in place
+  // Phase 2 (0.3-1.2s): advance forward fast while spinning + multiple hits
+  // Blue flame effect throughout
   me.state='spinkick';me.stateTime=0;
-  me.iframe=0.1;
-  me.vx=me.facing*1.5; // slight forward drift
-  me.vy=-2; // small hop
-  me.onGround=false;
-  flash('255,200,80',0.25);
+  me.iframe=0.15;
+  me.vx=0;me.vy=-1; // tiny hop in place
+  flash('100,180,255',0.3);
   shake(4);
   sfxSpinKick();
-  // 5 hits over 0.7s, every 130ms
-  const reach=KICK_REACH+8; // slightly longer than kick
-  for(let i=0;i<5;i++){
+  // 8 hits during advance phase (0.3-1.15s)
+  const reach=KICK_REACH+10;
+  for(let i=0;i<8;i++){
     setTimeout(()=>{
       if(roundOver||matchOver||!me||me.state!=='spinkick')return;
       sfxSpinKick();
-      // Visual swoosh
-      const ang=i*Math.PI*2/5;
-      spawnP({x:me.x+Math.cos(ang)*30,y:me.y-30+Math.sin(ang)*15,
-        vx:Math.cos(ang)*4,vy:Math.sin(ang)*2,
-        life:12,maxLife:12,type:'arc',
-        color:'rgba(255,200,100,0.9)',gravity:0});
-      // Kick streak particles
-      for(let j=0;j<3;j++){
-        const a=ang+(Math.random()-0.5)*0.6;
-        spawnP({x:me.x+Math.cos(a)*reach*0.5,y:me.y-30+Math.sin(a)*10,
-          vx:Math.cos(a)*3,vy:Math.sin(a)*1.5,
-          life:14,maxLife:14,type:'spark',
-          color:'#ffd970',size:3,gravity:0.05});
+      // Blue flame burst around player
+      for(let j=0;j<5;j++){
+        const ang=Math.random()*Math.PI*2;
+        spawnP({x:me.x+(Math.random()-0.5)*22,y:me.y-25+Math.random()*30,
+          vx:Math.cos(ang)*(1.5+Math.random()*1.5),vy:Math.sin(ang)*1.2-0.5,
+          life:18,maxLife:18,type:'energy',
+          color:'rgba(80,140,255,1)',size:4+Math.random()*2,gravity:-0.02});
       }
-      // Hit check both sides (spinning hits all around)
+      // Bright blue core
+      spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
+        life:10,maxLife:10,type:'shockwave',
+        color:'rgba(120,180,255,0.85)',size:5,maxR:32,gravity:0});
+      shake(3);
+      // Hit check toward opponent
       if(opp&&opp.state!=='dead'){
-        const f=opp.x>me.x?1:-1; // direction toward opp
-        const hbW=reach,hbH=44;
+        const f=opp.x>me.x?1:-1;
+        const hbW=reach,hbH=50;
         const hbX=me.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
         const hbY=me.y-50;
         const body=getBodyBox(opp);
         if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
-          sendMsg({type:'hit',dmg:5,kbDir:f,kind:'spinkick',bypass:true});
-          for(let k=0;k<3;k++){
+          sendMsg({type:'hit',dmg:4,kbDir:f,kind:'spinkick',bypass:true});
+          for(let k=0;k<4;k++){
             spawnP({x:opp.x,y:opp.y-30,
               vx:-f*(2+Math.random()*2),vy:-Math.random()*2,
-              life:14,maxLife:14,type:'spark',color:'#ffeb3b',size:3,gravity:0.2});
+              life:16,maxLife:16,type:'spark',color:'#88bbff',size:3,gravity:0.2});
           }
         }
       }
-    },80+i*130);
+    },300+i*110);
   }
-  // End state after all hits + recovery
-  setTimeout(()=>{if(me&&me.state==='spinkick'){me.state='idle';me.vx=0;}},900);
+  setTimeout(()=>{if(me&&me.state==='spinkick'){me.state='idle';me.vx=0;}},1300);
   me.inputHistory=[];
   sendMsg({type:'attack',kind:'spinkick'});
 }
@@ -1184,6 +1220,8 @@ function applyDamageToMe(dmg,kbDir,source,bypassIframe){
   if(!me||me.state==='dead')return;
   if(me.iframe>0&&!bypassIframe)return;
   let actualDmg=Math.max(1,dmg-getDefense(me));
+  // Shield: passive 33% damage reduction (electric aura)
+  if(me.items.has('shield'))actualDmg=Math.max(1,Math.floor(actualDmg*0.67));
   const isSpecial=(source==='hadouken'||source==='shoryuken');
   if(me.blocking){
     actualDmg=Math.max(1,Math.floor(actualDmg*0.2));
@@ -1678,6 +1716,11 @@ function updateHUD(){
   const oppPct=Math.max(0,opp.hp/opp.maxhp*100);
   document.getElementById('myHp').style.width=myPct+'%';
   document.getElementById('oppHp').style.width=oppPct+'%';
+  // Yellow trail behind HP bar follows with delay - shows damage taken
+  const myTrail=document.getElementById('myHpTrail');
+  const oppTrail=document.getElementById('oppHpTrail');
+  if(myTrail)myTrail.style.width=myPct+'%';
+  if(oppTrail)oppTrail.style.width=oppPct+'%';
   document.getElementById('myHp').className='hp-fill'+(myPct<25?' critical':(myPct<50?' warning':''));
   document.getElementById('oppHp').className='hp-fill'+(oppPct<25?' critical':(oppPct<50?' warning':''));
   document.getElementById('myHpNum').textContent=Math.ceil(me.hp)+'/'+me.maxhp;
@@ -1759,6 +1802,11 @@ function drawArena(){
       const sx=Math.random()*W;
       spawnP({x:sx,y:GROUND_Y-2,vx:0,vy:0,life:8,maxLife:8,type:'shockwave',
         color:'rgba(180,210,240,0.8)',size:1,maxR:6,gravity:0});
+    }
+    // Lightning flash randomly
+    if(Math.random()<0.003){
+      flash('200,220,255',0.25);
+      setTimeout(()=>{flash('255,255,255',0.15);},80);
     }
   } else if(stageType==='lava'){
     // ===== Lava dungeon =====
@@ -1844,9 +1892,25 @@ function drawArena(){
     const sky=ctx.createLinearGradient(0,0,0,GROUND_Y);
     sky.addColorStop(0,'#87ceeb');sky.addColorStop(0.6,'#bde4f5');sky.addColorStop(1,'#f5e6c8');
     ctx.fillStyle=sky;ctx.fillRect(0,0,W,GROUND_Y);
-    // Sun
-    ctx.fillStyle='#fff9b0';ctx.beginPath();ctx.arc(W-100,60,30,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#ffe070';ctx.beginPath();ctx.arc(W-100,60,22,0,Math.PI*2);ctx.fill();
+    // Sun with rays
+    const sunX=W-100,sunY=60;
+    ctx.save();
+    ctx.translate(sunX,sunY);
+    ctx.rotate(t*0.05);
+    // Rays
+    ctx.fillStyle='rgba(255,240,180,0.18)';
+    for(let r=0;r<8;r++){
+      ctx.save();
+      ctx.rotate(r*Math.PI/4);
+      ctx.beginPath();
+      ctx.moveTo(0,-30);ctx.lineTo(8,-90);ctx.lineTo(-8,-90);ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+    ctx.fillStyle='#fff9b0';ctx.beginPath();ctx.arc(sunX,sunY,30,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ffe070';ctx.beginPath();ctx.arc(sunX,sunY,22,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff9b0';ctx.beginPath();ctx.arc(sunX,sunY,12,0,Math.PI*2);ctx.fill();
     // Clouds
     ctx.fillStyle='#fff';
     for(let i=0;i<5;i++){
@@ -1934,6 +1998,33 @@ function drawStickman(p){
     ctx.ellipse(0,auraY,19,auraH+2,0,0,Math.PI*2);
     ctx.stroke();
   }
+  // Shield electric aura (지직지직)
+  if(p.items.has('shield')){
+    ctx.strokeStyle='rgba(140,210,255,0.85)';
+    ctx.lineWidth=1.5;
+    ctx.shadowBlur=6;ctx.shadowColor='#88ccff';
+    // Random electric arcs around body
+    for(let arc=0;arc<3;arc++){
+      const startAng=Math.random()*Math.PI*2;
+      let cx=Math.cos(startAng)*16;
+      let cy=auraY+Math.sin(startAng)*auraH*0.7;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      for(let s=0;s<4;s++){
+        cx+=(Math.random()-0.5)*10;
+        cy+=(Math.random()-0.5)*10;
+        ctx.lineTo(cx,cy);
+      }
+      ctx.stroke();
+    }
+    // Soft outer glow ellipse
+    ctx.shadowBlur=0;
+    ctx.strokeStyle=`rgba(120,200,255,${0.25+Math.sin(t*7)*0.15})`;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.ellipse(0,auraY,18,auraH+1,0,0,Math.PI*2);
+    ctx.stroke();
+  }
 
   const LW=3.5;
   ctx.strokeStyle=baseColor;ctx.fillStyle=baseColor;
@@ -1982,8 +2073,13 @@ function drawStickman(p){
     ctx.strokeStyle=baseColor;ctx.lineWidth=LW;
   }
 
-  // Head
-  ctx.fillStyle=baseColor;
+  // Head with subtle gradient depth
+  const hgrd=ctx.createRadialGradient(pose.head.x-3,pose.head.y-3,2,pose.head.x,pose.head.y,9);
+  // Lighten color for highlight
+  const lightCol=baseColor==='#fff'?'#fff':baseColor;
+  hgrd.addColorStop(0,lightCol);
+  hgrd.addColorStop(1,baseColor);
+  ctx.fillStyle=hgrd;
   ctx.beginPath();
   ctx.arc(pose.head.x,pose.head.y,9,0,Math.PI*2);
   ctx.fill();
@@ -1995,11 +2091,44 @@ function drawStickman(p){
     ctx.fillStyle='#d4af37';
     ctx.fillRect(pose.head.x-8,pose.head.y-12,16,1);
   }
-  // Face dot
+  // Face: eyes that look at opponent + expression based on state
+  const oppLook=opp ? (opp.x>p.x?1:-1)*p.facing : 1; // +1 looking forward, -1 looking back
+  const lookOff=oppLook*0.7;
+  // Eye whites
   ctx.fillStyle='#fff';
-  ctx.beginPath();
-  ctx.arc(pose.head.x+3,pose.head.y-1,1.5,0,Math.PI*2);
-  ctx.fill();
+  ctx.beginPath();ctx.arc(pose.head.x-2,pose.head.y-1,2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(pose.head.x+4,pose.head.y-1,2,0,Math.PI*2);ctx.fill();
+  // Pupils tracking opponent
+  ctx.fillStyle='#000';
+  if(p.state==='hit'||p.state==='dead'){
+    // X eyes when hit
+    ctx.strokeStyle='#000';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(pose.head.x-3.5,pose.head.y-2.5);ctx.lineTo(pose.head.x-0.5,pose.head.y+0.5);
+    ctx.moveTo(pose.head.x-0.5,pose.head.y-2.5);ctx.lineTo(pose.head.x-3.5,pose.head.y+0.5);
+    ctx.moveTo(pose.head.x+2.5,pose.head.y-2.5);ctx.lineTo(pose.head.x+5.5,pose.head.y+0.5);
+    ctx.moveTo(pose.head.x+5.5,pose.head.y-2.5);ctx.lineTo(pose.head.x+2.5,pose.head.y+0.5);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();ctx.arc(pose.head.x-2+lookOff,pose.head.y-1,1.1,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(pose.head.x+4+lookOff,pose.head.y-1,1.1,0,Math.PI*2);ctx.fill();
+  }
+  // Mouth based on state
+  ctx.strokeStyle='#000';ctx.lineWidth=1;
+  if(p.state==='hadouken'||p.state==='shoryuken'||p.state==='samchun'||p.state==='spinkick'||p.state==='punch'||p.state==='kick'){
+    // Open mouth (yelling)
+    ctx.fillStyle='#222';
+    ctx.beginPath();ctx.ellipse(pose.head.x+1,pose.head.y+3,2,1.5,0,0,Math.PI*2);ctx.fill();
+  } else if(p.state==='winpose'){
+    // Smile
+    ctx.beginPath();ctx.arc(pose.head.x+1,pose.head.y+2,2.2,0.2,Math.PI-0.2);ctx.stroke();
+  } else if(p.state==='hit'||p.state==='dead'){
+    // Frown
+    ctx.beginPath();ctx.arc(pose.head.x+1,pose.head.y+5,2,Math.PI+0.3,Math.PI*2-0.3);ctx.stroke();
+  } else {
+    // Neutral line
+    ctx.beginPath();ctx.moveTo(pose.head.x-1,pose.head.y+3);ctx.lineTo(pose.head.x+3,pose.head.y+3);ctx.stroke();
+  }
 
   // Hadouken charge effect
   if(p.state==='hadouken'&&p.stateTime<0.15){
@@ -2415,8 +2544,21 @@ function render(){
     ctx.fillStyle=`rgba(${flashColor},${screenFlash})`;
     ctx.fillRect(0,0,W,H);
   }
+  // Vignette - subtle dark edges for depth
+  if(!_vignetteCache){
+    _vignetteCache=document.createElement('canvas');
+    _vignetteCache.width=W;_vignetteCache.height=H;
+    const vc=_vignetteCache.getContext('2d');
+    const vg=vc.createRadialGradient(W/2,H/2,W*0.35,W/2,H/2,W*0.65);
+    vg.addColorStop(0,'rgba(0,0,0,0)');
+    vg.addColorStop(0.6,'rgba(0,0,0,0.05)');
+    vg.addColorStop(1,'rgba(0,0,0,0.45)');
+    vc.fillStyle=vg;vc.fillRect(0,0,W,H);
+  }
+  ctx.drawImage(_vignetteCache,0,0);
   ctx.restore();
 }
+let _vignetteCache=null;
 
 // ==================== MAIN LOOP ====================
 function broadcastState(){
