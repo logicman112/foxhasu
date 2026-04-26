@@ -124,6 +124,7 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
     🦘 <b>슈퍼점프</b>: 대쉬·달리기 중 SPACE → 멀리뛰기<br>
     🔥 <b>아도겐</b>: <kbd>뒤</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd> (충돌하면 상쇄!)<br>
     ⚡ <b>워류겐</b>: <kbd>앞</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd><br>
+    🌀 <b>회전 발차기</b>: <kbd>앞</kbd>→<kbd>↓</kbd>→<kbd>뒤</kbd> + <kbd>S</kbd> (5연속 히트)<br>
     ⚔ <b>三千世界</b>: 검+아도겐 커맨드 = 10연참 (사정 ×3)<br>
     📦 <b>펌프</b> 10초마다 → 6초 내 화살표 9개 → 80% 아이템 / 20% 꽝<br>
     🌧 <b>스테이지</b> 매 라운드 랜덤 (화창/비/용암/디스토피아)<br>
@@ -693,25 +694,17 @@ function recordDirPress(){
 function checkSpecial(){
   if(!me)return null;
   const now=performance.now();
-  const recent=me.inputHistory.filter(i=>now-i.t<800);
+  // Only check inputs in last 600ms
+  const recent=me.inputHistory.filter(i=>now-i.t<600);
   if(recent.length<3)return null;
-  // Get last 3-5 inputs and search for valid pattern at end
-  const lastN=recent.slice(-5).map(i=>i.dir);
-  // Helper to check if pattern appears as ordered subsequence at end
-  function hasPatternEnd(pattern){
-    let pi=pattern.length-1;
-    for(let i=lastN.length-1;i>=0;i--){
-      if(lastN[i]===pattern[pi]){
-        pi--;
-        if(pi<0)return true;
-      }
-    }
-    return false;
-  }
-  // Shoryuken first (forward, down, forward) since shares with hadouken
-  if(hasPatternEnd(['forward','down','forward']))return 'shoryuken';
-  // Hadouken (back, down, forward)
-  if(hasPatternEnd(['back','down','forward']))return 'hadouken';
+  // STRICT: Check exactly the last 3 inputs (no subsequence search)
+  const last3=recent.slice(-3).map(i=>i.dir);
+  // Hadouken: back → down → forward
+  if(last3[0]==='back'&&last3[1]==='down'&&last3[2]==='forward')return 'hadouken';
+  // Shoryuken: forward → down → forward
+  if(last3[0]==='forward'&&last3[1]==='down'&&last3[2]==='forward')return 'shoryuken';
+  // Spin kick: forward → down → back (triggered with S key)
+  if(last3[0]==='forward'&&last3[1]==='down'&&last3[2]==='back')return 'spinkick';
   return null;
 }
 
@@ -730,19 +723,20 @@ function updateMe(dt){
   const blockingByShield=me.items.has('shield')&&held(KB.block)&&me.onGround;
   me.blocking=(blockingByBack||blockingByShield)&&me.state!=='hit';
   // Crouching: hold ↓ on ground, while not attacking/hit
-  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun'].includes(me.state);
+  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick'].includes(me.state);
 
   // ===== Double-tap forward detection (run/dash) =====
   const nowMs=performance.now();
   const fwdKey=me.facing>0?KB.right:KB.left;
   const backKey=me.facing>0?KB.left:KB.right;
-  if(KP[fwdKey] && me.onGround && !['hit','hadouken','shoryuken','samchun'].includes(me.state)){
+  if(KP[fwdKey] && me.onGround && !['hit','hadouken','shoryuken','samchun','spinkick'].includes(me.state)){
     if(nowMs-me.lastFwdTapTime<DBL_TAP_WINDOW){
       // Double tap → start dash burst
       me.dashTime=DASH_TIME;
       me.lastFwdTapTime=0; // consumed
-      sfxDjump(); // dash whoosh
-      // Spawn dash particles
+      // CRITICAL: Clear input history so dash 'forward's don't pollute special detection
+      me.inputHistory=[];
+      sfxDjump();
       for(let i=0;i<4;i++){
         spawnP({x:me.x-me.facing*10,y:me.y-20-Math.random()*30,
           vx:-me.facing*(2+Math.random()*2),vy:(Math.random()-0.5)*1.5,
@@ -772,7 +766,7 @@ function updateMe(dt){
     }
   }
   // Movement
-  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun'].includes(me.state)){
+  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun','spinkick'].includes(me.state)){
     let dx=0;
     if(held(KB.left))dx-=1;
     if(held(KB.right))dx+=1;
@@ -823,18 +817,19 @@ function updateMe(dt){
   // Reset fly on ground
   if(me.onGround && me.items.has('jacket')) me.flyTime=2;
   else if(me.onGround) me.flyTime=0;
-  // Attacks
-  if(me.state!=='hit'&&me.state!=='hadouken'&&me.state!=='shoryuken'&&me.state!=='samchun'){
+  // Attacks (block during special states)
+  if(!['hit','hadouken','shoryuken','samchun','spinkick'].includes(me.state)){
     if(pressed(KB.punch)){
       const sp=checkSpecial();
-      // Shoryuken works with or without sword.
-      // Hadouken: no sword = normal, with sword = 삼천세계 (sword combo)
       if(sp==='shoryuken')startShoryuken();
       else if(sp==='hadouken'&&me.items.has('sword'))startSamchun();
       else if(sp==='hadouken')startHadouken();
       else startPunch();
     } else if(pressed(KB.kick)){
-      startKick();
+      const sp=checkSpecial();
+      // Spin kick: forward, down, back + S
+      if(sp==='spinkick')startSpinKick();
+      else startKick();
     }
   }
   // Physics
@@ -865,6 +860,7 @@ function updateMe(dt){
   else if(me.state==='hadouken'&&me.stateTime>0.5)me.state='idle';
   else if(me.state==='shoryuken'&&me.stateTime>0.4)me.state='idle';
   else if(me.state==='samchun'&&me.stateTime>1.3)me.state='idle';
+  else if(me.state==='spinkick'&&me.stateTime>0.85)me.state='idle';
   else if(me.state==='hit'&&me.stateTime>(me.hitDuration||0.3))me.state='idle';
   if(me.state==='shoryuken'&&me.stateTime<0.05){
     me.vy=-11;me.vx=me.facing*3.5;me.onGround=false;
@@ -977,6 +973,65 @@ function startHadouken(){
     });
   },180);
   me.inputHistory=[];
+}
+function sfxSpinKick(){
+  // Whoosh whoosh circular kick sound
+  tone(400,0.05,'sawtooth',0.06,200);
+  tone(700,0.06,'square',0.05,400,0.03);
+  noise(0.06,0.04,3000);
+}
+function startSpinKick(){
+  // Forward → down → back + S = 회전 발차기 (spin kick)
+  me.state='spinkick';me.stateTime=0;
+  me.iframe=0.1;
+  me.vx=me.facing*1.5; // slight forward drift
+  me.vy=-2; // small hop
+  me.onGround=false;
+  flash('255,200,80',0.25);
+  shake(4);
+  sfxSpinKick();
+  // 5 hits over 0.7s, every 130ms
+  const reach=KICK_REACH+8; // slightly longer than kick
+  for(let i=0;i<5;i++){
+    setTimeout(()=>{
+      if(roundOver||matchOver||!me||me.state!=='spinkick')return;
+      sfxSpinKick();
+      // Visual swoosh
+      const ang=i*Math.PI*2/5;
+      spawnP({x:me.x+Math.cos(ang)*30,y:me.y-30+Math.sin(ang)*15,
+        vx:Math.cos(ang)*4,vy:Math.sin(ang)*2,
+        life:12,maxLife:12,type:'arc',
+        color:'rgba(255,200,100,0.9)',gravity:0});
+      // Kick streak particles
+      for(let j=0;j<3;j++){
+        const a=ang+(Math.random()-0.5)*0.6;
+        spawnP({x:me.x+Math.cos(a)*reach*0.5,y:me.y-30+Math.sin(a)*10,
+          vx:Math.cos(a)*3,vy:Math.sin(a)*1.5,
+          life:14,maxLife:14,type:'spark',
+          color:'#ffd970',size:3,gravity:0.05});
+      }
+      // Hit check both sides (spinning hits all around)
+      if(opp&&opp.state!=='dead'){
+        const f=opp.x>me.x?1:-1; // direction toward opp
+        const hbW=reach,hbH=44;
+        const hbX=me.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
+        const hbY=me.y-50;
+        const body=getBodyBox(opp);
+        if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
+          sendMsg({type:'hit',dmg:5,kbDir:f,kind:'spinkick',bypass:true});
+          for(let k=0;k<3;k++){
+            spawnP({x:opp.x,y:opp.y-30,
+              vx:-f*(2+Math.random()*2),vy:-Math.random()*2,
+              life:14,maxLife:14,type:'spark',color:'#ffeb3b',size:3,gravity:0.2});
+          }
+        }
+      }
+    },80+i*130);
+  }
+  // End state after all hits + recovery
+  setTimeout(()=>{if(me&&me.state==='spinkick'){me.state='idle';me.vx=0;}},900);
+  me.inputHistory=[];
+  sendMsg({type:'attack',kind:'spinkick'});
 }
 function sfxSamchunSlash(){
   // 채챙! metallic clang
@@ -1368,9 +1423,10 @@ function updateParticles(){
     if(afterimages[i].life<=0)afterimages.splice(i,1);
   }
 }
-function shake(amt){screenShake=Math.max(screenShake,amt);}
-function flash(col,amt){flashColor=col;screenFlash=Math.max(screenFlash,amt);}
-function freeze(t){hitFreeze=Math.max(hitFreeze,t);}
+function shake(amt){screenShake=Math.max(screenShake,Math.min(amt,12));}
+// Flash capped at 0.35 alpha so character is always visible
+function flash(col,amt){flashColor=col;screenFlash=Math.max(screenFlash,Math.min(amt,0.35));}
+function freeze(t){hitFreeze=Math.max(hitFreeze,Math.min(t,0.1));}
 
 // ==================== ROUND/MATCH ====================
 function startGame(){
@@ -1408,14 +1464,6 @@ function startRound(){
   document.getElementById('myPumpBar').classList.remove('active');
   updateHUD();
   showRoundBanner('Round '+roundNum);
-  // Fade in
-  bgFadeAlpha=1;
-  const fadeStep=()=>{
-    bgFadeAlpha-=0.04;
-    if(bgFadeAlpha<=0){bgFadeAlpha=0;return;}
-    requestAnimationFrame(fadeStep);
-  };
-  fadeStep();
   setTimeout(()=>{
     showCountdown('3',()=>{sfxCount();
       showCountdown('2',()=>{sfxCount();
@@ -1440,33 +1488,20 @@ function endRound(){
     scores[winner]++;
     if(winner===myIdx){sfxRoundWin();showRoundBanner('🎉 라운드 승리!');}
     else{sfxLose();showRoundBanner('😭 라운드 패배');}
-    // Slow motion + winner/loser pose for MY character only
-    // (opponent's pose is set on their own client and synced via broadcast)
-    hitFreeze=0.05;
+    // Set winner/loser pose briefly (no physics or fade)
     setTimeout(()=>{
       if(!me)return;
       if(winner===myIdx){
-        // I win
         me.state='winpose';me.stateTime=0;
         me.vx=0;me.vy=0;
-      } else {
-        // I lose: fly back
+      } else if(winner>=0){
         me.state='dead';
-        me.vx=-me.facing*7;me.vy=-7;
+        me.vx=0;me.vy=0;
       }
-    },200);
+    },150);
   } else showRoundBanner('무승부');
   if(isHost){sendMsg({type:'roundEnd',winner,scores:scores.slice()});}
-  // Fade to black, then to next round
-  setTimeout(()=>{
-    const fade=()=>{
-      bgFadeAlpha+=0.04;
-      if(bgFadeAlpha>=1){bgFadeAlpha=1;return;}
-      requestAnimationFrame(fade);
-    };
-    fade();
-  },1800);
-  setTimeout(()=>nextRound(winner),2800);
+  setTimeout(()=>nextRound(winner),2200);
 }
 function handleRoundEnd(winner){
   // Guest receives roundEnd from host
@@ -1848,17 +1883,19 @@ function drawArena(){
       ctx.fillRect(i+(i*7)%6,GROUND_Y-2,1,3);
     }
   }
-  // Round fade overlay
-  if(bgFadeAlpha>0){
-    ctx.fillStyle=`rgba(0,0,0,${bgFadeAlpha})`;
-    ctx.fillRect(0,0,W,H);
-  }
+  // (round transition fade removed - was causing visibility issues)
 }
 function drawStickman(p){
   if(!p)return;
   const t=performance.now()/1000;
   ctx.save();
   ctx.translate(p.x,p.y);
+  // Spin kick rotation (whole body spins around)
+  if(p.state==='spinkick'){
+    ctx.translate(0,-30);
+    ctx.rotate(p.stateTime*Math.PI*4); // ~2 rotations per second
+    ctx.translate(0,30);
+  }
   ctx.scale(p.facing,1);
   ctx.lineCap='round';ctx.lineJoin='round';
   // shadow
@@ -2153,6 +2190,15 @@ function getPose(p,t){
     pose.lArm.j2={x:5,y:-44};
     pose.lArm.j3={x:14,y:-38};
     pose.head.x=2;
+  } else if(p.state==='spinkick'){
+    // Horizontal spin: leg extended outward
+    pose.rLeg.j2={x:8,y:-22};
+    pose.rLeg.j3={x:24,y:-18};
+    pose.lLeg.j2={x:-3,y:-15};
+    pose.lLeg.j3={x:-2,y:-5};
+    pose.lArm.j3={x:-12,y:-38};
+    pose.rArm.j3={x:6,y:-44};
+    pose.head.x=2;pose.head.y=-50;
   } else if(p.state==='hit'){
     const k=Math.min(1,p.stateTime*4);
     pose.head.x=-2*k;
