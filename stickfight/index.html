@@ -1768,6 +1768,7 @@ function broadcastState(){
   });
 }
 function loop(){
+  try{
   const now=performance.now();
   const dt=Math.min((now-lastFrameTime)/1000,0.05);
   lastFrameTime=now;
@@ -1796,7 +1797,8 @@ function loop(){
       pumpState.timeLeft-=dt;
       if(pumpState.wrongFlash>0)pumpState.wrongFlash--;
       checkPumpInput();
-      if(pumpState.timeLeft<=0)endPump(false);
+      // checkPumpInput may set pumpState=null on success; guard before next access
+      if(pumpState && pumpState.timeLeft<=0)endPump(false);
     }
     updateMe(dt);
     updateProjectiles();
@@ -1806,6 +1808,10 @@ function loop(){
   }
   render();
   for(const k in KP)KP[k]=false;
+  }catch(err){
+    console.error('[stickfight] loop error:',err);
+    // Don't kill the loop - keep going
+  }
   requestAnimationFrame(loop);
 }
 loop();
