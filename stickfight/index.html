@@ -122,7 +122,8 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
     펀치(무기 포함): <kbd>A</kbd> · 킥: <kbd>S</kbd> · 방패(아이템): <kbd>L</kbd><br>
     🔥 <b>아도겐</b>: <kbd>뒤</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd><br>
     ⚡ <b>워류겐</b>: <kbd>앞</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd><br>
-    📦 <b>펌프 커맨드</b> 10초마다 등장 → 화살표 9개 입력하면 <b>랜덤 아이템 즉시 적용!</b><br>
+    📦 <b>펌프 커맨드</b> 10초마다 등장 → <b>6초</b> 안에 화살표 9개 입력하면 랜덤 아이템 즉시 적용!<br>
+    펌프 입력: <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 또는 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 둘 다 OK<br>
     ⏱ 한 판 2분 · 3판 2선승제
   </div>
   <div style="font-size:12px;color:#888;text-align:center;margin-top:10px">
@@ -175,7 +176,7 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
   </div>
   <canvas id="arena" width="900" height="380"></canvas>
   <div class="pump-bar" id="myPumpBar">
-    <div class="pump-title">🎯 펌프! 화살표 키로 입력 (성공 시 즉시 아이템)</div>
+    <div class="pump-title">🎯 펌프! ↑↓←→ 또는 WASD 입력 · 6초 안에 9개!</div>
     <div class="pump-arrows" id="myPumpArrows"></div>
     <div class="pump-progress" id="myPumpProgress">0/9</div>
   </div>
@@ -227,13 +228,20 @@ const JUMP_VEL=9;
 const SPEED_BASE=3.2;
 const ROUND_TIME=120;
 const PUMP_INTERVAL=10;
-const PUMP_DURATION=8;
+const PUMP_DURATION=PUMP_TIME;
 const ITEMS=['sword','hat','boots','shield','jacket'];
 const ITEM_NAMES={sword:'⚔ 검',hat:'🎩 모자',boots:'👢 부츠',shield:'🛡 방패',jacket:'🧥 자켓'};
 const ITEM_ICONS={sword:'⚔',hat:'🎩',boots:'👢',shield:'🛡',jacket:'🧥'};
 const HADO_DMG=12,SHORYU_DMG=15,PUNCH_DMG=6,KICK_DMG=9;
 const HADO_SPEED=6.5;
-const PUNCH_REACH=28,KICK_REACH=34;
+// Hitbox dimensions (pixels). Reach = extend in front from attacker center
+const PUNCH_REACH=32; // arm + fist
+const KICK_REACH=44;  // leg is longer
+const SHORYU_REACH=34;
+const SWORD_BONUS=18;
+const BODY_HALF_W=8; // opp body half-width
+const BODY_HEIGHT=58; // opp body height (feet to head top)
+const PUMP_TIME=6; // seconds to complete pump
 
 // ==================== STATE ====================
 let peer=null,conn=null,isHost=false;
@@ -270,7 +278,7 @@ addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(!KEYS[k])KP[k]=true;
   KEYS[k]=true;
-  if(['arrowleft','arrowright','arrowup','arrowdown',' ','a','s','l'].includes(k))e.preventDefault();
+  if(['arrowleft','arrowright','arrowup','arrowdown',' ','a','s','d','w','l'].includes(k))e.preventDefault();
   startAudio();
 });
 addEventListener('keyup',e=>{
@@ -568,48 +576,81 @@ function applyItemEffects(p){
 function getSpeed(p){return SPEED_BASE+(p.items.has('boots')?2:0);}
 function getMaxJumps(p){return p.items.has('boots')?2:1;}
 function getDefense(p){return (p.items.has('hat')?2:0);}
-function getReach(p,base){return base+(p.items.has('sword')?16:0);}
+function getReach(p,base){return base+(p.items.has('sword')?SWORD_BONUS:0);}
 function getDmg(p,base){return base+(p.items.has('sword')?4:0);}
-
-function getDirInput(){
-  if(!me)return 'neutral';
-  let h=0,v=0;
-  if(held(KB.left))h-=1;
-  if(held(KB.right))h+=1;
-  if(held(KB.up))v-=1;
-  if(held(KB.down))v+=1;
-  const fwd=h*me.facing>0?1:(h*me.facing<0?-1:0);
-  if(v>0&&fwd>0)return 'down-forward';
-  if(v>0&&fwd<0)return 'down-back';
-  if(v>0)return 'down';
-  if(v<0&&fwd>0)return 'up-forward';
-  if(v<0)return 'up';
-  if(fwd>0)return 'forward';
-  if(fwd<0)return 'back';
-  return 'neutral';
+// AABB rectangle intersection
+function rectsHit(ax,ay,aw,ah,bx,by,bw,bh){
+  return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
 }
-function recordDirInput(){
-  const dir=getDirInput();
-  if(dir!==me.lastDir){
-    if(dir!=='neutral'){
-      me.inputHistory.push({dir,t:performance.now()});
-      if(me.inputHistory.length>8)me.inputHistory.shift();
-    }
-    me.lastDir=dir;
+// Build hitbox rect for a kind of attack from attacker
+function getAttackHitbox(att,kind){
+  const reach=getReach(att,kind==='punch'?PUNCH_REACH:kind==='kick'?KICK_REACH:SHORYU_REACH);
+  const f=att.facing;
+  let hbW,hbH,hbX,hbY;
+  if(kind==='punch'){
+    hbW=reach;hbH=14;
+    hbX=att.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
+    hbY=att.y-40; // around hand
+  } else if(kind==='kick'){
+    hbW=reach;hbH=18;
+    hbX=att.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
+    hbY=att.y-22; // lower than punch
+  } else { // shoryuken: tall vertical hitbox in front
+    hbW=reach;hbH=70;
+    hbX=att.x+(f>0?-2:-hbW+2); // slightly overlapping body
+    hbY=att.y-72;
   }
+  return {x:hbX,y:hbY,w:hbW,h:hbH};
+}
+// Get opponent body box
+function getBodyBox(p){
+  return {x:p.x-BODY_HALF_W,y:p.y-BODY_HEIGHT,w:BODY_HALF_W*2,h:BODY_HEIGHT};
+}
+
+// Record direction on KEY PRESS (most reliable for fighting game commands)
+function recordDirPress(){
+  if(!me)return;
+  const now=performance.now();
+  if(KP[KB.left]){
+    const dir=me.facing>0?'back':'forward';
+    me.inputHistory.push({dir,t:now});
+  }
+  if(KP[KB.right]){
+    const dir=me.facing>0?'forward':'back';
+    me.inputHistory.push({dir,t:now});
+  }
+  if(KP[KB.down]){
+    me.inputHistory.push({dir:'down',t:now});
+  }
+  // Trim history
+  if(me.inputHistory.length>10){
+    me.inputHistory=me.inputHistory.slice(-10);
+  }
+  // Drop expired
+  me.inputHistory=me.inputHistory.filter(i=>now-i.t<1000);
 }
 function checkSpecial(){
-  const recent=me.inputHistory.filter(i=>performance.now()-i.t<800);
+  if(!me)return null;
+  const now=performance.now();
+  const recent=me.inputHistory.filter(i=>now-i.t<800);
   if(recent.length<3)return null;
-  const last3=recent.slice(-3).map(i=>i.dir);
-  const seq=last3.join(',');
-  // 아도겐: 뒤 → 아래 → 앞
-  if(seq==='back,down,forward')return 'hadouken';
-  // 워류겐: 앞 → 아래 → 앞
-  if(seq==='forward,down,forward')return 'shoryuken';
-  // Also accept diagonals as variations
-  if((last3[0]==='back'||last3[0]==='down-back')&&last3[1].startsWith('down')&&(last3[2]==='forward'||last3[2]==='down-forward'))return 'hadouken';
-  if(last3[0]==='forward'&&last3[1].startsWith('down')&&last3[2]==='forward')return 'shoryuken';
+  // Get last 3-5 inputs and search for valid pattern at end
+  const lastN=recent.slice(-5).map(i=>i.dir);
+  // Helper to check if pattern appears as ordered subsequence at end
+  function hasPatternEnd(pattern){
+    let pi=pattern.length-1;
+    for(let i=lastN.length-1;i>=0;i--){
+      if(lastN[i]===pattern[pi]){
+        pi--;
+        if(pi<0)return true;
+      }
+    }
+    return false;
+  }
+  // Shoryuken first (forward, down, forward) since shares with hadouken
+  if(hasPatternEnd(['forward','down','forward']))return 'shoryuken';
+  // Hadouken (back, down, forward)
+  if(hasPatternEnd(['back','down','forward']))return 'hadouken';
   return null;
 }
 
@@ -617,7 +658,7 @@ function checkSpecial(){
 function updateMe(dt){
   if(roundOver||matchOver||!me)return;
   if(me.state==='dead')return;
-  recordDirInput();
+  recordDirPress();
   // Auto-face opp
   if(me.onGround && !['punch','kick','hadouken','shoryuken','hit'].includes(me.state) && opp){
     me.facing=opp.x>me.x?1:-1;
@@ -834,21 +875,21 @@ function scheduleHitCheck(kind,delay){
   setTimeout(()=>{
     if(roundOver||matchOver||!me||me.state==='dead')return;
     if(!opp||opp.state==='dead')return;
-    let reach,dmg,knockback;
-    if(kind==='punch'){reach=getReach(me,PUNCH_REACH);dmg=getDmg(me,PUNCH_DMG);knockback=2;}
-    else if(kind==='kick'){reach=getReach(me,KICK_REACH);dmg=getDmg(me,KICK_DMG);knockback=3;}
-    else if(kind==='shoryuken'){reach=40;dmg=SHORYU_DMG;knockback=4;}
-    const dx=opp.x-me.x;
-    const facingMatch=Math.sign(dx)===me.facing;
-    const distOK=Math.abs(dx)<reach+15;
-    const heightOK=Math.abs(opp.y-me.y)<50;
-    if(facingMatch&&distOK&&heightOK&&opp.iframe!==undefined?true:true){
-      // Send hit to opponent
-      sendMsg({type:'hit',dmg,kbDir:me.facing,kind});
-      // Spawn local hit particles for instant feedback
-      for(let i=0;i<5;i++){
-        particles.push({x:opp.x+(-me.facing)*8,y:opp.y-30,vx:-me.facing*(2+Math.random()*3),vy:-2-Math.random()*2,life:25,sz:3,color:'#ffeb3b'});
-      }
+    // Compute proper AABB hitbox/bodybox
+    const hb=getAttackHitbox(me,kind);
+    const body=getBodyBox(opp);
+    if(!rectsHit(hb.x,hb.y,hb.w,hb.h,body.x,body.y,body.w,body.h))return;
+    let dmg,knockback;
+    if(kind==='punch'){dmg=getDmg(me,PUNCH_DMG);knockback=2;}
+    else if(kind==='kick'){dmg=getDmg(me,KICK_DMG);knockback=3;}
+    else {dmg=SHORYU_DMG;knockback=4;}
+    sendMsg({type:'hit',dmg,kbDir:me.facing,kind});
+    // Local hit feedback particles at impact point
+    const impactX=me.facing>0?Math.max(me.x+BODY_HALF_W,Math.min(opp.x-BODY_HALF_W,hb.x+hb.w-4)):
+                              Math.min(me.x-BODY_HALF_W,Math.max(opp.x+BODY_HALF_W,hb.x+4));
+    for(let i=0;i<6;i++){
+      spawnP({x:impactX,y:opp.y-30,vx:-me.facing*(1+Math.random()*3),vy:-1-Math.random()*2,
+        life:18,maxLife:18,type:'spark',color:'#ffeb3b',size:3,gravity:0.2});
     }
   },delay*1000);
 }
@@ -1182,11 +1223,12 @@ function grantRandomItem(){
 function checkPumpInput(){
   if(!pumpState)return;
   const target=pumpState.seq[pumpState.pos];
+  // Accept both arrows AND WASD
   let press=null;
-  if(KP[KB.up])press='↑';
-  else if(KP[KB.down])press='↓';
-  else if(KP[KB.left])press='←';
-  else if(KP[KB.right])press='→';
+  if(KP['arrowup']||KP['w'])press='↑';
+  else if(KP['arrowdown']||KP['s'])press='↓';
+  else if(KP['arrowleft']||KP['a'])press='←';
+  else if(KP['arrowright']||KP['d'])press='→';
   if(!press)return;
   if(press===target){
     pumpState.pos++;
