@@ -119,8 +119,8 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
   <div class="controls-mini">
     <b>🎮 조작</b><br>
     이동: <kbd>←</kbd><kbd>→</kbd> · 앉기: <kbd>↓</kbd> · 점프(2단): <kbd>SPACE</kbd><br>
-    펀치(무기 포함): <kbd>A</kbd> · 킥: <kbd>S</kbd> · 방패: <kbd>L</kbd> · <b>뒤로 누르면 막기 (이동 1/3)</b><br>
-    💨 <b>대쉬/달리기</b>: 앞방향 빠르게 2번 (붙여서 누르고 있으면 달리기)<br>
+    펀치(무기 포함): <kbd>A</kbd> · 킥: <kbd>S</kbd> · 방패: <kbd>L</kbd>(아이템) · 뒤로=가드<br>
+    💨 <b>대쉬</b>: 앞방향 빠르게 2번 짧게 / <b>달리기</b>: 앞방향 2번 후 유지<br>
     🦘 <b>슈퍼점프</b>: 대쉬·달리기 중 SPACE → 멀리뛰기<br>
     🔥 <b>아도겐</b>: <kbd>뒤</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd> (충돌하면 상쇄!)<br>
     ⚡ <b>워류겐</b>: <kbd>앞</kbd>→<kbd>↓</kbd>→<kbd>앞</kbd> + <kbd>A</kbd><br>
@@ -229,13 +229,13 @@ input[type="text"]:focus{border-color:#5a8aff;box-shadow:0 0 0 3px rgba(90,138,2
 const GAME_PREFIX='seoro-stickfight-v2';
 const W=900,H=380;
 const GROUND_Y=330;
-const GRAVITY=0.6;
-const JUMP_VEL=12;
-const SPEED_BASE=4.5;
-const RUN_MULT=1.65;
-const DASH_VX=12;
-const DASH_TIME=0.18;
-const DBL_TAP_WINDOW=280; // ms for double-tap detection
+const GRAVITY=0.55;
+const JUMP_VEL=10;
+const SPEED_BASE=3.8;
+const RUN_MULT=1.5;
+const DASH_VX=6.5;
+const DASH_TIME=0.12;
+const DBL_TAP_WINDOW=280;
 const ROUND_TIME=120;
 const PUMP_INTERVAL=10;
 const PUMP_TIME=6; // seconds to complete pump
@@ -246,15 +246,14 @@ const ITEM_ICONS={sword:'⚔',hat:'🎩',boots:'👢',shield:'🛡',jacket:'🧥
 const HADO_DMG=12,SHORYU_DMG=15,PUNCH_DMG=6,KICK_DMG=9;
 const HADO_SPEED=6.5;
 // Hitbox dimensions (pixels). Reach = extend in front from attacker center
-// 2x scale for bigger characters
-const PUNCH_REACH=58;
-const KICK_REACH=80;
-const SHORYU_REACH=84; // +1 unit (was 68 at 2x, +16 = 84)
-const SWORD_BONUS=32;
-const BODY_HALF_W=14;
-const BODY_HEIGHT=110;
-// Character pose scale
-const POSE_SCALE=1.85;
+const PUNCH_REACH=40;
+const KICK_REACH=55;
+const SHORYU_REACH=50;
+const SWORD_BONUS=22;
+const BODY_HALF_W=10;
+const BODY_HEIGHT=72;
+// Character pose scale (1.25x base)
+const POSE_SCALE=1.25;
 
 // ==================== STATE ====================
 let peer=null,conn=null,isHost=false;
@@ -649,23 +648,23 @@ function getAttackHitbox(att,kind){
   const f=att.facing;
   let hbW,hbH,hbX,hbY;
   if(kind==='punch'){
-    hbW=reach;hbH=26;
+    hbW=reach;hbH=18;
     hbX=att.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
-    hbY=att.y-78; // around hand (scaled)
+    hbY=att.y-52; // hand height for 1.25x char
   } else if(kind==='kick'){
-    hbW=reach;hbH=34;
+    hbW=reach;hbH=24;
     hbX=att.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
-    hbY=att.y-44; // lower than punch
-  } else { // shoryuken: tall vertical hitbox in front
-    hbW=reach;hbH=130;
-    hbX=att.x+(f>0?-4:-hbW+4);
-    hbY=att.y-130;
+    hbY=att.y-30;
+  } else { // shoryuken
+    hbW=reach;hbH=85;
+    hbX=att.x+(f>0?-2:-hbW+2);
+    hbY=att.y-90;
   }
   return {x:hbX,y:hbY,w:hbW,h:hbH};
 }
 // Get opponent body box (shorter when crouching)
 function getBodyBox(p){
-  const h=p.crouching?52:BODY_HEIGHT;
+  const h=p.crouching?38:BODY_HEIGHT;
   return {x:p.x-BODY_HALF_W,y:p.y-h,w:BODY_HALF_W*2,h};
 }
 
@@ -762,34 +761,24 @@ function updateMe(dt){
   if(me.dashTime>0&&me.onGround&&me.state!=='hit'){
     me.dashTime-=dt;
     me.vx=me.facing*DASH_VX;
-    // Afterimage trail (throttled - max 1 per 60ms to prevent flicker)
-    if(!me._lastAi||nowMs-me._lastAi>60){
-      me._lastAi=nowMs;
-      const pose=getPose(me,nowMs/1000);
-      afterimages.push({x:me.x,y:me.y,facing:me.facing,
-        pose:JSON.parse(JSON.stringify(pose)),life:8,maxLife:8,
-        color:me.color});
-    }
-    // Speed line particles
-    if(Math.random()<0.4){
-      spawnP({x:me.x-me.facing*15,y:me.y-50-Math.random()*40,
-        vx:-me.facing*2,vy:0,life:14,maxLife:14,type:'smoke',
-        size:5,gravity:0});
+    // Clean speed line particles only (no afterimage flicker)
+    if(Math.random()<0.5){
+      spawnP({x:me.x-me.facing*8,y:me.y-30-Math.random()*30,
+        vx:-me.facing*1.5,vy:0,life:10,maxLife:10,type:'smoke',
+        size:4,gravity:0});
     }
     if(me.dashTime<=0&&held(fwdKey)){
       me.running=true;
     }
   }
-  // Movement (crouching slows, backwards = blocking + 1/3 speed)
+  // Movement
   if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun'].includes(me.state)){
     let dx=0;
     if(held(KB.left))dx-=1;
     if(held(KB.right))dx+=1;
     let speed=getSpeed(me);
-    // If moving backward = block-walk (1/3 speed)
-    if(dx!==0&&Math.sign(dx)!==me.facing)speed*=0.34;
-    if(me.blocking&&Math.sign(dx)===me.facing)dx=0; // can't walk forward while blocking
     if(me.crouching)dx*=0.5;
+    // Run mode boost (forward only)
     if(me.running&&dx!==0&&Math.sign(dx)===me.facing)speed*=RUN_MULT;
     me.vx=dx*speed;
   } else if(me.dashTime<=0) {
@@ -880,13 +869,8 @@ function updateMe(dt){
   if(me.state==='shoryuken'&&me.stateTime<0.05){
     me.vy=-11;me.vx=me.facing*3.5;me.onGround=false;
   }
-  // Continuous shoryuken trail (afterimages + flames)
+  // Shoryuken flame trail (no afterimages)
   if(me.state==='shoryuken'&&me.stateTime<0.4){
-    if(!me._lastShAi||performance.now()-me._lastShAi>80){
-      me._lastShAi=performance.now();
-      const pose=getPose(me,performance.now()/1000);
-      afterimages.push({x:me.x,y:me.y,facing:me.facing,pose:JSON.parse(JSON.stringify(pose)),life:7,maxLife:7,color:'#ff8a3d'});
-    }
     // Rising fire embers around character
     for(let i=0;i<2;i++){
       spawnP({
@@ -968,8 +952,8 @@ function startHadouken(){
   }
   setTimeout(()=>{
     if(roundOver||matchOver)return;
-    const proj={x:me.x+me.facing*40,y:me.y-78,vx:me.facing*HADO_SPEED,owner:myIdx,
-      dmg:HADO_DMG,r:22,life:130,hue:hue,pulse:0};
+    const proj={x:me.x+me.facing*26,y:me.y-50,vx:me.facing*HADO_SPEED,owner:myIdx,
+      dmg:HADO_DMG,r:15,life:130,hue:hue,pulse:0};
     projectiles.push(proj);
     sendMsg({type:'projectile',x:proj.x,y:proj.y,vx:proj.vx,dmg:proj.dmg,owner:myIdx});
     // Launch burst
@@ -1058,9 +1042,9 @@ function startSamchun(){
       flash('220,240,255',0.08);
       // Hit check using AABB at full reach
       const f=me.facing;
-      const hbW=reach,hbH=70;
+      const hbW=reach,hbH=50;
       const hbX=me.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
-      const hbY=me.y-66;
+      const hbY=me.y-50;
       if(opp&&opp.state!=='dead'){
         const body=getBodyBox(opp);
         if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
@@ -1914,7 +1898,7 @@ function drawStickman(p){
     ctx.stroke();
   }
 
-  const LW=5; // line width scaled for bigger char
+  const LW=3.5;
   ctx.strokeStyle=baseColor;ctx.fillStyle=baseColor;
   ctx.lineWidth=LW;
 
@@ -1929,8 +1913,8 @@ function drawStickman(p){
   // Boots
   if(p.items.has('boots')){
     ctx.fillStyle='#553a1a';
-    ctx.fillRect(pose.lLeg.j3.x-7,pose.lLeg.j3.y-3,14,6);
-    ctx.fillRect(pose.rLeg.j3.x-7,pose.rLeg.j3.y-3,14,6);
+    ctx.fillRect(pose.lLeg.j3.x-5,pose.lLeg.j3.y-2,10,5);
+    ctx.fillRect(pose.rLeg.j3.x-5,pose.rLeg.j3.y-2,10,5);
     ctx.fillStyle=baseColor;
   }
   // Arms
@@ -1940,14 +1924,14 @@ function drawStickman(p){
   // Sword
   if(p.items.has('sword')){
     const h=pose.rArm.j3;
-    ctx.strokeStyle='#ddd';ctx.lineWidth=4;
+    ctx.strokeStyle='#ddd';ctx.lineWidth=3;
     ctx.beginPath();
     ctx.moveTo(h.x,h.y);
-    ctx.lineTo(h.x+34,h.y-5);
+    ctx.lineTo(h.x+22,h.y-3);
     ctx.stroke();
-    ctx.strokeStyle='#aa6a2a';ctx.lineWidth=3;
+    ctx.strokeStyle='#aa6a2a';ctx.lineWidth=2;
     ctx.beginPath();
-    ctx.moveTo(h.x-2,h.y+2);ctx.lineTo(h.x+6,h.y-4);
+    ctx.moveTo(h.x-1,h.y+1);ctx.lineTo(h.x+4,h.y-3);
     ctx.stroke();
     ctx.strokeStyle=baseColor;ctx.lineWidth=LW;
   }
@@ -1955,47 +1939,41 @@ function drawStickman(p){
   if(p.items.has('shield')){
     const h=pose.lArm.j3;
     ctx.fillStyle=p.blocking?'#7d4':'#aaa';
-    ctx.fillRect(h.x-4,h.y-13,8,22);
-    ctx.strokeStyle='#222';ctx.lineWidth=1.5;
-    ctx.strokeRect(h.x-4,h.y-13,8,22);
+    ctx.fillRect(h.x-3,h.y-9,6,15);
+    ctx.strokeStyle='#222';ctx.lineWidth=1;
+    ctx.strokeRect(h.x-3,h.y-9,6,15);
     ctx.strokeStyle=baseColor;ctx.lineWidth=LW;
   }
 
   // Head
   ctx.fillStyle=baseColor;
   ctx.beginPath();
-  ctx.arc(pose.head.x,pose.head.y,13,0,Math.PI*2);
+  ctx.arc(pose.head.x,pose.head.y,9,0,Math.PI*2);
   ctx.fill();
   // Hat
   if(p.items.has('hat')){
     ctx.fillStyle='#222';
-    ctx.fillRect(pose.head.x-17,pose.head.y-15,34,4);
-    ctx.fillRect(pose.head.x-11,pose.head.y-24,22,9);
+    ctx.fillRect(pose.head.x-12,pose.head.y-11,24,3);
+    ctx.fillRect(pose.head.x-8,pose.head.y-17,16,6);
     ctx.fillStyle='#d4af37';
-    ctx.fillRect(pose.head.x-11,pose.head.y-17,22,2);
+    ctx.fillRect(pose.head.x-8,pose.head.y-12,16,1);
   }
   // Face dot
   ctx.fillStyle='#fff';
   ctx.beginPath();
-  ctx.arc(pose.head.x+4,pose.head.y-2,2,0,Math.PI*2);
+  ctx.arc(pose.head.x+3,pose.head.y-1,1.5,0,Math.PI*2);
   ctx.fill();
 
   // Hadouken charge effect
   if(p.state==='hadouken'&&p.stateTime<0.15){
     ctx.fillStyle=`hsla(${p.idx===0?210:330},100%,60%,${0.5+Math.sin(p.stateTime*30)*0.4})`;
     ctx.beginPath();
-    ctx.arc(36,-50,14,0,Math.PI*2);
+    ctx.arc(24,-34,10,0,Math.PI*2);
     ctx.fill();
   }
 
   ctx.restore();
-
-  // iframe flash
-  if(p.iframe>0&&Math.floor(performance.now()/80)%2===0){
-    ctx.save();ctx.globalAlpha=0.3;ctx.fillStyle='#fff';
-    ctx.fillRect(p.x-26,p.y-115,52,115);
-    ctx.restore();
-  }
+  // (iframe flash removed - no flicker)
 
   // Attack swooshes
   if(p.state==='punch'&&p.stateTime<0.15){
@@ -2365,13 +2343,13 @@ function drawAfterimages(){
     ctx.translate(a.x,a.y);
     ctx.scale(a.facing,1);
     ctx.lineCap='round';ctx.lineJoin='round';
-    ctx.strokeStyle=a.color;ctx.lineWidth=5;
+    ctx.strokeStyle=a.color;ctx.lineWidth=3.5;
     ctx.fillStyle=a.color;
     const pose=a.pose;
     ctx.beginPath();ctx.moveTo(pose.spine.top.x,pose.spine.top.y);ctx.lineTo(pose.spine.bot.x,pose.spine.bot.y);ctx.stroke();
     drawLimb(pose.lLeg);drawLimb(pose.rLeg);
     drawLimb(pose.lArm);drawLimb(pose.rArm);
-    ctx.beginPath();ctx.arc(pose.head.x,pose.head.y,13,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(pose.head.x,pose.head.y,9,0,Math.PI*2);ctx.fill();
     ctx.restore();
   }
 }
