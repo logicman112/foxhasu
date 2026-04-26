@@ -762,18 +762,20 @@ function updateMe(dt){
   if(me.dashTime>0&&me.onGround&&me.state!=='hit'){
     me.dashTime-=dt;
     me.vx=me.facing*DASH_VX;
-    // Afterimage trail
-    const pose=getPose(me,nowMs/1000);
-    afterimages.push({x:me.x,y:me.y,facing:me.facing,
-      pose:JSON.parse(JSON.stringify(pose)),life:10,maxLife:10,
-      color:me.color});
+    // Afterimage trail (throttled - max 1 per 60ms to prevent flicker)
+    if(!me._lastAi||nowMs-me._lastAi>60){
+      me._lastAi=nowMs;
+      const pose=getPose(me,nowMs/1000);
+      afterimages.push({x:me.x,y:me.y,facing:me.facing,
+        pose:JSON.parse(JSON.stringify(pose)),life:8,maxLife:8,
+        color:me.color});
+    }
     // Speed line particles
-    if(Math.random()<0.6){
+    if(Math.random()<0.4){
       spawnP({x:me.x-me.facing*15,y:me.y-50-Math.random()*40,
         vx:-me.facing*2,vy:0,life:14,maxLife:14,type:'smoke',
         size:5,gravity:0});
     }
-    // After dash ends, if still holding fwd → enter run mode
     if(me.dashTime<=0&&held(fwdKey)){
       me.running=true;
     }
@@ -880,9 +882,10 @@ function updateMe(dt){
   }
   // Continuous shoryuken trail (afterimages + flames)
   if(me.state==='shoryuken'&&me.stateTime<0.4){
-    if(Math.random()<0.7){
+    if(!me._lastShAi||performance.now()-me._lastShAi>80){
+      me._lastShAi=performance.now();
       const pose=getPose(me,performance.now()/1000);
-      afterimages.push({x:me.x,y:me.y,facing:me.facing,pose:JSON.parse(JSON.stringify(pose)),life:10,maxLife:10,color:'#ff8a3d'});
+      afterimages.push({x:me.x,y:me.y,facing:me.facing,pose:JSON.parse(JSON.stringify(pose)),life:7,maxLife:7,color:'#ff8a3d'});
     }
     // Rising fire embers around character
     for(let i=0;i<2;i++){
@@ -1453,20 +1456,19 @@ function endRound(){
     scores[winner]++;
     if(winner===myIdx){sfxRoundWin();showRoundBanner('🎉 라운드 승리!');}
     else{sfxLose();showRoundBanner('😭 라운드 패배');}
-    // Slow motion + winner pose
+    // Slow motion + winner/loser pose for MY character only
+    // (opponent's pose is set on their own client and synced via broadcast)
     hitFreeze=0.05;
     setTimeout(()=>{
-      // Loser flies away
-      const loser=winner===myIdx?opp:me;
-      const winnerObj=winner===myIdx?me:opp;
-      if(loser&&loser.state!=='dead'){
-        loser.state='dead';
-        loser.vx=loser.facing*-7;loser.vy=-7;
-      }
-      if(winnerObj){
-        winnerObj.state='winpose';
-        winnerObj.stateTime=0;
-        winnerObj.vx=0;winnerObj.vy=0;
+      if(!me)return;
+      if(winner===myIdx){
+        // I win
+        me.state='winpose';me.stateTime=0;
+        me.vx=0;me.vy=0;
+      } else {
+        // I lose: fly back
+        me.state='dead';
+        me.vx=-me.facing*7;me.vy=-7;
       }
     },200);
   } else showRoundBanner('무승부');
@@ -2448,29 +2450,29 @@ function loop(){
     updateHUD();
     broadcastState();
   } else if(roundOver&&!matchOver){
-    // Round-end cinematic physics: loser still flies, particles continue
-    for(const p of [me,opp]){
-      if(!p)continue;
-      p.vy+=GRAVITY*0.7; // slowmo gravity
-      if(p.vy>10)p.vy=10;
-      p.x+=p.vx*0.6; // slow motion
-      p.y+=p.vy*0.6;
-      if(p.y>=GROUND_Y){
-        p.y=GROUND_Y;
-        if(p.vy>4){
-          // Bounce
-          shake(4);
-          for(let k=0;k<8;k++){
-            spawnP({x:p.x,y:p.y-2,vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,
+    // Round-end cinematic: only animate MY character locally + broadcast.
+    // Opponent's animation runs on their client; we just receive their state.
+    if(me){
+      me.vy+=GRAVITY*0.7;
+      if(me.vy>10)me.vy=10;
+      me.x+=me.vx*0.6;
+      me.y+=me.vy*0.6;
+      if(me.y>=GROUND_Y){
+        me.y=GROUND_Y;
+        if(me.vy>4){
+          shake(3);
+          for(let k=0;k<6;k++){
+            spawnP({x:me.x,y:me.y-2,vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,
               life:18,maxLife:18,type:'smoke',size:5,gravity:0.1});
           }
         }
-        p.vy=p.vy>4?-p.vy*0.4:0;
-        p.vx*=0.85;
+        me.vy=me.vy>4?-me.vy*0.4:0;
+        me.vx*=0.85;
       }
-      if(p.state==='winpose')p.stateTime+=dt;
-      if(p.state==='dead')p.stateTime+=dt;
+      if(me.state==='winpose'||me.state==='dead')me.stateTime+=dt;
     }
+    // Continue broadcasting so opp's character moves correctly on their side
+    broadcastState();
     updateProjectiles();
     updateParticles();
     updateHUD();
