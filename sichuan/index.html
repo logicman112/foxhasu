@@ -210,7 +210,7 @@ input[type="text"]:focus{border-color:#c08840;box-shadow:0 0 0 3px rgba(192,136,
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 // ==================== CONFIG ====================
-const GAME_PREFIX='seoro-sichuan-v5';
+const GAME_PREFIX='seoro-sichuan-v1';
 const TILES=[
   '🍎','🍌','🍇','🍉','🍊','🍋','🍓','🥝','🍑','🍒',
   '🍅','🥕','🌽','🥦','🍆','🍄','🥑','🥒','🍠',
@@ -595,20 +595,28 @@ function tryCreate(){
   const code=generateCode();
   document.getElementById('roomCode').textContent=code;
   if(peer){try{peer.destroy();}catch(e){}}
+  console.log('[sichuan] Creating peer:',GAME_PREFIX+'-'+code);
   peer=new Peer(GAME_PREFIX+'-'+code,{debug:1});
   peer.on('open',id=>{
+    console.log('[sichuan] Host peer ready:',id);
     document.getElementById('createStatus').innerHTML='<span class="blink">● 연결 대기 중...</span>';
   });
   peer.on('connection',c=>{
-    conn=c;setupConnection();
-    c.on('open',()=>{
+    console.log('[sichuan] Incoming connection from',c.peer);
+    conn=c;
+    setupConnection();
+    const onOpen=()=>{
+      console.log('[sichuan] Data channel open, generating board');
       board=generateBoard();
       sendInitMsg();
       startGame();
       toast('상대방이 참가했습니다!');
-    });
+    };
+    if(c.open)onOpen();
+    else c.on('open',onOpen);
   });
   peer.on('error',err=>{
+    console.error('[sichuan] Peer error:',err.type,err);
     if(err.type==='unavailable-id')tryCreate();
     else document.getElementById('createStatus').innerHTML='<span style="color:#f66">⚠ 오류: '+err.type+'<br><button onclick="tryCreate()">🔄 재시도</button></span>';
   });
@@ -632,8 +640,10 @@ function doJoin(){
   isHost=false;
   document.getElementById('joinStatus').innerHTML='<span class="blink">⏳ 연결 중... (최대 10초)</span>';
   if(peer){try{peer.destroy();}catch(e){}}
+  console.log('[sichuan] Joining room:',code);
   peer=new Peer({debug:1});
   peer.on('open',id=>{
+    console.log('[sichuan] Guest peer ready, connecting to host');
     conn=peer.connect(GAME_PREFIX+'-'+code,{reliable:true,serialization:'json'});
     let connected=false;
     const timer=setTimeout(()=>{
@@ -642,16 +652,22 @@ function doJoin(){
         try{conn.close();}catch(e){}
       }
     },10000);
-    conn.on('open',()=>{
+    const onConnOpen=()=>{
+      console.log('[sichuan] Connected to host, waiting for board');
       connected=true;clearTimeout(timer);
       setupConnection();
-    });
+      document.getElementById('joinStatus').innerHTML='<span class="blink">⏳ 보드 받는 중...</span>';
+    };
+    if(conn.open)onConnOpen();
+    else conn.on('open',onConnOpen);
     conn.on('error',err=>{
+      console.error('[sichuan] Conn error:',err);
       clearTimeout(timer);
       document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 연결 실패</span>';
     });
   });
   peer.on('error',err=>{
+    console.error('[sichuan] Guest peer error:',err.type,err);
     if(err.type==='peer-unavailable'){
       document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 해당 코드의 방이 없습니다.</span>';
     } else document.getElementById('joinStatus').innerHTML='<span style="color:#f66">❌ 오류: '+err.type+'<br><button onclick="doJoin()">🔄 재시도</button></span>';
@@ -682,6 +698,7 @@ function applyRemoteBoard(data){
   board=buildBoardFromFlat(data.tiles);
 }
 function handleMsg(data){
+  console.log('[sichuan] msg:',data&&data.type);
   if(data.type==='init'){
     applyRemoteBoard(data);
     startGame();
