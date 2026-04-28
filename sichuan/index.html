@@ -1094,7 +1094,7 @@ function spawnBurst(el,text){
 }
 
 function onTileClick(r,c,el){
-  if(!gameStarted||gameOver||busyAnim)return;
+  if(!gameStarted||gameOver)return;
   if(board[r][c]===0)return;
   sfxClick();
   if(!selected){
@@ -1109,10 +1109,13 @@ function onTileClick(r,c,el){
   }
   const path=canConnect(board,selected.r,selected.c,r,c);
   if(path){
-    busyAnim=true;
     const a=selected;
-    el.classList.add('selected');
-    drawPath(path);
+    // 1. State updated INSTANTLY so next click is never blocked
+    board[a.r][a.c]=0;
+    board[r][c]=0;
+    myCleared+=2;
+    selected=null;
+    // 2. Combo + sound
     comboCount++;
     if(comboCount>=2){
       sfxCombo(comboCount);
@@ -1122,33 +1125,36 @@ function onTileClick(r,c,el){
     }
     if(comboTimer)clearTimeout(comboTimer);
     comboTimer=setTimeout(()=>{comboCount=0;},2400);
+    // 3. Visual (path + tile removal animation in parallel)
+    drawPath(path);
+    a.el.classList.remove('selected');
+    a.el.classList.add('removing');
+    el.classList.add('removing');
+    // 4. Sync + UI
+    sendMsg({type:'progress',cleared:myCleared});
+    updateStatusUI();
+    updateMatchableUI();
+    // 5. Remove DOM after animation completes
+    const aEl=a.el, bEl=el;
     setTimeout(()=>{
-      a.el.classList.add('removing');
-      el.classList.add('removing');
-      board[a.r][a.c]=0;
-      board[r][c]=0;
-      myCleared+=2;
-      sendMsg({type:'progress',cleared:myCleared});
-      updateStatusUI();
-      updateMatchableUI();
+      if(aEl.parentNode)aEl.remove();
+      if(bEl.parentNode)bEl.remove();
+    },260);
+    // 6. Win check
+    if(myCleared>=TOTAL){
+      gameOver=true;
+      stopTimer();
+      sendMsg({type:'won'});
+      showWinner(true);
+      sfxWin();
+      return;
+    }
+    // 7. Deadlock check (delayed so user sees the match first)
+    if(!findAnyPair(board)){
       setTimeout(()=>{
-        if(a.el.parentNode)a.el.remove();
-        if(el.parentNode)el.remove();
-        selected=null;
-        busyAnim=false;
-        if(myCleared>=TOTAL){
-          gameOver=true;
-          stopTimer();
-          sendMsg({type:'won'});
-          showWinner(true);
-          sfxWin();
-          return;
-        }
-        if(!findAnyPair(board)){
-          shuffleRemaining(true);
-        }
-      },210);
-    },130);
+        if(!gameOver&&!findAnyPair(board))shuffleRemaining(true);
+      },380);
+    }
   } else {
     selected.el.classList.remove('selected');
     selected.el.classList.add('shake');
