@@ -47,9 +47,10 @@ input[type="text"]:focus{border-color:#c08840;box-shadow:0 0 0 3px rgba(192,136,
 .stat-divider{width:1px;background:rgba(220,180,120,0.3)}
 .stat-item.lead{animation:leadPulse 1.2s infinite}
 @keyframes leadPulse{0%,100%{filter:none}50%{filter:drop-shadow(0 0 8px rgba(255,217,61,0.7))}}
-.stat-info{flex:0 0 auto;font-size:12px;color:#a08868;text-align:center;min-width:54px;align-self:center}
+.stat-info{flex:0 0 auto;font-size:12px;color:#a08868;text-align:center;min-width:60px;align-self:center}
 .stat-info .timer{color:#e8d4b0;font-family:monospace;font-size:15px;font-weight:bold}
 .stat-info .mini-diff{font-size:11px;margin-top:1px}
+.stat-info .pattern-name{font-size:11px;color:#ffb060;margin-top:1px;font-weight:bold}
 
 .board-wrap{position:relative;background:linear-gradient(135deg,#3a2410 0%,#2a1808 100%);border-radius:14px;padding:calc(var(--tile-size,46px)*0.5);margin:6px 0;box-shadow:0 12px 32px rgba(0,0,0,0.6),inset 0 0 60px rgba(0,0,0,0.55);border:4px solid #6b4520;overflow:visible}
 .board-wrap::before{content:'';position:absolute;inset:4px;border-radius:11px;border:1px solid rgba(220,180,120,0.18);pointer-events:none}
@@ -116,13 +117,13 @@ input[type="text"]:focus{border-color:#c08840;box-shadow:0 0 0 3px rgba(192,136,
 
 <div id="menu" class="screen">
   <h1>🀄 사천성 1:1</h1>
-  <p class="subtitle">같은 그림 두 장을 연결해 없애기 · 먼저 다 깨면 승리</p>
+  <p class="subtitle">한게임 사천성 정통 룰 · 매번 다른 모양 보드 · 실시간 대결</p>
   <div class="diff-section">
     <div class="diff-label">난이도 (방장이 선택)</div>
     <div class="diff-row" id="diffRow">
-      <button class="diff-btn" data-diff="easy">초급<small>14 × 8 · 112장 · 빈공간 X</small></button>
-      <button class="diff-btn active" data-diff="medium">중급<small>16 × 10 · 144장 · 빈공간 16</small></button>
-      <button class="diff-btn" data-diff="hard">고급<small>18 × 12 · 168장 · 빈공간 48</small></button>
+      <button class="diff-btn" data-diff="easy">초급<small>14×8 보드 · 6가지 모양</small></button>
+      <button class="diff-btn active" data-diff="medium">중급<small>16×10 보드 · 6가지 모양</small></button>
+      <button class="diff-btn" data-diff="hard">고급<small>18×12 보드 · 6가지 모양</small></button>
     </div>
   </div>
   <div class="btn-row">
@@ -130,9 +131,9 @@ input[type="text"]:focus{border-color:#c08840;box-shadow:0 0 0 3px rgba(192,136,
     <button class="big secondary" onclick="showJoin()">🚪 방 참가하기</button>
   </div>
   <p class="hint-text">
-    같은 그림 두 장을 클릭 → 꺾임 <b>2번 이내</b>로 이어지면 짝!<br>
-    <b>빈 공간</b>이 있어 패가 더 다양한 길로 연결돼요<br>
-    실시간 대결 · 💡힌트 · 🔀섞기 · 짝 없으면 자동 셔플
+    같은 그림 두 장 클릭 → 꺾임 <b>2번 이내</b> 연결 시 짝!<br>
+    매 게임마다 <b>도넛 · 십자 · H · 계단 · 미로 · X자</b> 등 다양한 모양 등장<br>
+    💡힌트 / 🔀섞기 각 3회 · 짝 없으면 자동 셔플
   </p>
 </div>
 
@@ -166,18 +167,19 @@ input[type="text"]:focus{border-color:#c08840;box-shadow:0 0 0 3px rgba(192,136,
     <div class="top-status">
       <div class="stat-item my" id="myStats">
         <div class="label">남은 패 (나)</div>
-        <div class="value" id="myRemain">144</div>
+        <div class="value" id="myRemain">0</div>
         <div class="sub-label">제거가능 <b id="matchable">0</b></div>
       </div>
       <div class="stat-divider"></div>
       <div class="stat-info">
         <div class="timer" id="timer">00:00</div>
         <div class="mini-diff" id="diffLabelMini">중급</div>
+        <div class="pattern-name" id="patternName">기본</div>
       </div>
       <div class="stat-divider"></div>
       <div class="stat-item opp" id="oppStats">
         <div class="label">남은 패 (상대)</div>
-        <div class="value" id="oppRemain">144</div>
+        <div class="value" id="oppRemain">0</div>
       </div>
     </div>
     <div class="board-wrap" id="boardWrap">
@@ -208,32 +210,255 @@ input[type="text"]:focus{border-color:#c08840;box-shadow:0 0 0 3px rgba(192,136,
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 // ==================== CONFIG ====================
-const GAME_PREFIX='seoro-sichuan-v4';
-// 42 distinct food/drink emojis (Hangame Sichuan style)
+const GAME_PREFIX='seoro-sichuan-v5';
 const TILES=[
-  '🍎','🍌','🍇','🍉','🍊','🍋','🍓','🥝','🍑','🍒',  // 1-10 fruits
-  '🍅','🥕','🌽','🥦','🍆','🍄','🥑','🥒','🍠',        // 11-19 veggies
-  '🍞','🥐','🥖','🥨','🥯','🥞','🧇',                  // 20-26 breads
-  '🍔','🍕','🌭','🥪','🌮',                            // 27-31 fast food
-  '🍙','🍣','🍤','🍱','🍜',                            // 32-36 asian
-  '🍩','🍪','🎂','🧁','🍫','🍦'                        // 37-42 sweets
+  '🍎','🍌','🍇','🍉','🍊','🍋','🍓','🥝','🍑','🍒',
+  '🍅','🥕','🌽','🥦','🍆','🍄','🥑','🥒','🍠',
+  '🍞','🥐','🥖','🥨','🥯','🥞','🧇',
+  '🍔','🍕','🌭','🥪','🌮',
+  '🍙','🍣','🍤','🍱','🍜',
+  '🍩','🍪','🎂','🧁','🍫','🍦'
 ];
+const MAX_TYPES=42;
 
-// Difficulty configs - cells - holes = total = types*copies
+// Difficulty configs - just hint/shuffle counts; board dims come from templates
 const DIFF={
-  easy:   {name:'초급', cols:14, rows:8,  types:28, copies:4, total:112, holes:0,  hints:5, shuffles:3},  // 14*8 -0 =112=28*4
-  medium: {name:'중급', cols:16, rows:10, types:36, copies:4, total:144, holes:16, hints:3, shuffles:3},  // 16*10-16=144=36*4
-  hard:   {name:'고급', cols:18, rows:12, types:42, copies:4, total:168, holes:48, hints:2, shuffles:3}   // 18*12-48=168=42*4
+  easy:   {name:'초급', hints:5, shuffles:3},
+  medium: {name:'중급', hints:3, shuffles:3},
+  hard:   {name:'고급', hints:2, shuffles:3}
 };
-let curDiff='medium';
-let COLS, ROWS, GRID_COLS, GRID_ROWS, TOTAL, NUM_TYPES, COPIES;
 
-function applyDiff(diffKey){
-  curDiff=diffKey;
-  const d=DIFF[diffKey];
-  COLS=d.cols; ROWS=d.rows; GRID_COLS=COLS+2; GRID_ROWS=ROWS+2;
-  TOTAL=d.total; NUM_TYPES=d.types; COPIES=d.copies;
-}
+// ==================== TEMPLATES ====================
+// '.' = 패, ' ' = 빈 공간 (홀)
+// 각 라인의 길이가 곧 cols, 라인 개수가 rows
+const TEMPLATES={
+  easy:[
+    {name:'기본',grid:[
+      '..............',
+      '..............',
+      '..............',
+      '..............',
+      '..............',
+      '..............',
+      '..............',
+      '..............'
+    ]},
+    {name:'도넛',grid:[
+      '..............',
+      '..............',
+      '....      ....',
+      '....      ....',
+      '....      ....',
+      '....      ....',
+      '..............',
+      '..............'
+    ]},
+    {name:'십자',grid:[
+      '   ........   ',
+      '   ........   ',
+      '   ........   ',
+      '..............',
+      '..............',
+      '   ........   ',
+      '   ........   ',
+      '   ........   '
+    ]},
+    {name:'H자',grid:[
+      '....      ....',
+      '....      ....',
+      '....      ....',
+      '..............',
+      '..............',
+      '....      ....',
+      '....      ....',
+      '....      ....'
+    ]},
+    {name:'양섬',grid:[
+      '.....    .....',
+      '.....    .....',
+      '.....    .....',
+      '.....    .....',
+      '.....    .....',
+      '.....    .....',
+      '.....    .....',
+      '.....    .....'
+    ]},
+    {name:'계단',grid:[
+      '....          ',
+      '......        ',
+      '........      ',
+      '..........    ',
+      '    ..........',
+      '      ........',
+      '        ......',
+      '          ....'
+    ]}
+  ],
+  medium:[
+    {name:'기본',grid:[
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................'
+    ]},
+    {name:'도넛',grid:[
+      '................',
+      '................',
+      '................',
+      '.....######.....',
+      '.....######.....',
+      '.....######.....',
+      '.....######.....',
+      '................',
+      '................',
+      '................'
+    ]},
+    {name:'십자',grid:[
+      '    ........    ',
+      '    ........    ',
+      '    ........    ',
+      '................',
+      '................',
+      '................',
+      '................',
+      '    ........    ',
+      '    ........    ',
+      '    ........    '
+    ]},
+    {name:'양다리',grid:[
+      '.....      .....',
+      '.....      .....',
+      '.....      .....',
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....      .....',
+      '.....      .....',
+      '.....      .....'
+    ]},
+    {name:'팔각',grid:[
+      '    ........    ',
+      '  ............  ',
+      ' .............. ',
+      '................',
+      '................',
+      '................',
+      '................',
+      ' .............. ',
+      '  ............  ',
+      '    ........    '
+    ]},
+    {name:'계단',grid:[
+      '......          ',
+      '........        ',
+      '..........      ',
+      '............    ',
+      '..............  ',
+      '  ..............',
+      '    ............',
+      '      ..........',
+      '        ........',
+      '          ......'
+    ]}
+  ],
+  hard:[
+    {name:'대도넛',grid:[
+      '..................',
+      '..................',
+      '..................',
+      '.....########.....',
+      '.....########.....',
+      '.....########.....',
+      '.....########.....',
+      '.....########.....',
+      '.....########.....',
+      '..................',
+      '..................',
+      '..................'
+    ]},
+    {name:'X자',grid:[
+      '..              ..',
+      '...            ...',
+      '....          ....',
+      '.....        .....',
+      '......      ......',
+      '.......    .......',
+      '.......    .......',
+      '......      ......',
+      '.....        .....',
+      '....          ....',
+      '...            ...',
+      '..              ..'
+    ]},
+    {name:'미로',grid:[
+      '..................',
+      '..................',
+      '   ............   ',
+      '   ............   ',
+      '   ...      ...   ',
+      '   ...      ...   ',
+      '   ...      ...   ',
+      '   ...      ...   ',
+      '   ............   ',
+      '   ............   ',
+      '..................',
+      '..................'
+    ]},
+    {name:'지그재그',grid:[
+      '.........         ',
+      '.........         ',
+      '.........         ',
+      '         .........',
+      '         .........',
+      '         .........',
+      '.........         ',
+      '.........         ',
+      '.........         ',
+      '         .........',
+      '         .........',
+      '         .........'
+    ]},
+    {name:'井자',grid:[
+      '..................',
+      '..................',
+      '...    ....    ...',
+      '...    ....    ...',
+      '..................',
+      '...    ....    ...',
+      '...    ....    ...',
+      '..................',
+      '...    ....    ...',
+      '...    ....    ...',
+      '..................',
+      '..................'
+    ]},
+    {name:'다이아',grid:[
+      '       ....       ',
+      '      ......      ',
+      '     ........     ',
+      '    ..........    ',
+      '   ............   ',
+      '..................',
+      '..................',
+      '   ............   ',
+      '    ..........    ',
+      '     ........     ',
+      '      ......      ',
+      '       ....       '
+    ]}
+  ]
+};
+
+let curDiff='medium';
+let curTemplate='';
+let COLS, ROWS, GRID_COLS, GRID_ROWS, TOTAL, NUM_TYPES, COPIES;
 
 // ==================== STATE ====================
 let peer=null, conn=null, isHost=false;
@@ -247,8 +472,6 @@ let tileSize=46;
 let busyAnim=false;
 let comboCount=0, comboTimer=null;
 let hintsLeft=3, shufflesLeft=3;
-
-applyDiff('medium');
 
 // ==================== UI helpers ====================
 function showScreen(id){
@@ -309,10 +532,8 @@ function noise(dur,vol=0.04,filter=2000,t0=0){
 }
 function sfxClick(){tone(800,0.04,'sine',0.05);tone(1200,0.03,'sine',0.03,null,0.01);}
 function sfxMatch(){
-  // Snappy attack burst - gives "thwack" feel
   noise(0.05,0.09,5500);
   tone(2200,0.05,'square',0.05,800);
-  // Bell chime
   tone(659.25,0.16,'sine',0.09,null,0.02);
   tone(987.77,0.20,'sine',0.07,null,0.05);
   tone(1318.51,0.28,'sine',0.06,null,0.10);
@@ -367,7 +588,6 @@ function showCreate(){
   const envErr=checkEnvironment();
   if(envErr){alert(envErr);return;}
   showScreen('create');isHost=true;
-  applyDiff(curDiff);
   document.getElementById('createDiffLabel').textContent=DIFF[curDiff].name;
   tryCreate();
 }
@@ -383,7 +603,7 @@ function tryCreate(){
     conn=c;setupConnection();
     c.on('open',()=>{
       board=generateBoard();
-      sendMsg({type:'init',diff:curDiff,tiles:flattenBoard(board)});
+      sendInitMsg();
       startGame();
       toast('상대방이 참가했습니다!');
     });
@@ -444,12 +664,28 @@ function setupConnection(){
   });
 }
 function sendMsg(d){if(conn&&conn.open)conn.send(d);}
+function sendInitMsg(){
+  sendMsg({type:'init',diff:curDiff,rows:ROWS,cols:COLS,total:TOTAL,name:curTemplate,tiles:flattenBoard(board)});
+}
+function sendNewBoardMsg(){
+  sendMsg({type:'newBoard',diff:curDiff,rows:ROWS,cols:COLS,total:TOTAL,name:curTemplate,tiles:flattenBoard(board)});
+}
+function applyRemoteBoard(data){
+  curDiff=data.diff||curDiff;
+  ROWS=data.rows;
+  COLS=data.cols;
+  GRID_ROWS=ROWS+2;
+  GRID_COLS=COLS+2;
+  TOTAL=data.total;
+  curTemplate=data.name||'';
+  // Don't need NUM_TYPES/COPIES on guest (just for tile pool generation)
+  board=buildBoardFromFlat(data.tiles);
+}
 function handleMsg(data){
   if(data.type==='init'){
-    applyDiff(data.diff||'medium');
-    board=buildBoardFromFlat(data.tiles);
+    applyRemoteBoard(data);
     startGame();
-    toast('연결되었습니다! · 난이도: '+DIFF[curDiff].name);
+    toast('연결됨 · '+DIFF[curDiff].name+' · '+curTemplate);
   } else if(data.type==='progress'){
     oppCleared=data.cleared;
     updateStatusUI();
@@ -464,27 +700,24 @@ function handleMsg(data){
     if(confirm('상대방이 재대결을 요청했습니다. 수락?')){
       sendMsg({type:'resetAck',accept:true});
       if(isHost){
-        applyDiff(curDiff);
         board=generateBoard();
-        sendMsg({type:'newBoard',diff:curDiff,tiles:flattenBoard(board)});
+        sendNewBoardMsg();
         resetGame();
       }
     } else sendMsg({type:'resetAck',accept:false});
   } else if(data.type==='resetAck'){
     if(data.accept){
       if(isHost){
-        applyDiff(curDiff);
         board=generateBoard();
-        sendMsg({type:'newBoard',diff:curDiff,tiles:flattenBoard(board)});
+        sendNewBoardMsg();
         resetGame();
         toast('재대결 시작!');
       }
     } else toast('상대방이 거절했습니다');
   } else if(data.type==='newBoard'){
-    applyDiff(data.diff||curDiff);
-    board=buildBoardFromFlat(data.tiles);
+    applyRemoteBoard(data);
     resetGame();
-    toast('재대결 시작!');
+    toast('재대결 · '+curTemplate);
   }
 }
 
@@ -501,142 +734,85 @@ function buildBoardFromFlat(flat){
   return b;
 }
 
-// ==================== Mask (hole patterns) ====================
-function generateMask(rows,cols,targetHoles){
-  const mask=Array.from({length:rows},()=>new Array(cols).fill(false));
-  if(targetHoles===0)return mask;
-  const style=Math.floor(Math.random()*4);
-  let placed=0,safety=600;
-
-  if(style===0){
-    // Center concentration block
-    const w=Math.min(cols-4,Math.max(2,Math.ceil(Math.sqrt(targetHoles*1.6))));
-    const h=Math.min(rows-2,Math.max(2,Math.ceil(targetHoles/w)));
-    const startC=Math.floor((cols-w)/2);
-    const startR=Math.floor((rows-h)/2);
-    for(let r=startR;r<startR+h&&placed<targetHoles;r++){
-      for(let c=startC;c<startC+w&&placed<targetHoles;c++){
-        if(r>=0&&r<rows&&c>=0&&c<cols&&!mask[r][c]){mask[r][c]=true;placed++;}
-      }
+// ==================== Template parsing & Board generation ====================
+function parseTemplate(tmpl){
+  const grid=tmpl.grid;
+  const rows=grid.length;
+  let cols=0;
+  for(const row of grid)cols=Math.max(cols,row.length);
+  const mask=[];
+  let total=0;
+  for(let r=0;r<rows;r++){
+    const arr=[];
+    for(let c=0;c<cols;c++){
+      const ch=grid[r][c]||' ';
+      const playable=(ch==='.');
+      arr.push(playable);
+      if(playable)total++;
     }
-  } else if(style===1){
-    // Vertical channels (2-3 strips)
-    const channels=2+Math.floor(Math.random()*2);
-    for(let i=1;i<=channels&&placed<targetHoles;i++){
-      const c=Math.floor(i*cols/(channels+1));
-      const len=Math.min(rows-2,Math.ceil(targetHoles/channels));
-      const startR=Math.floor((rows-len)/2);
-      for(let r=startR;r<startR+len&&placed<targetHoles;r++){
-        if(!mask[r][c]){mask[r][c]=true;placed++;}
-      }
-    }
-  } else if(style===2){
-    // Symmetric scattered clusters (mirror horizontal)
-    while(placed<targetHoles&&safety-->0){
-      const halfCols=Math.floor(cols/2);
-      const w=1+Math.floor(Math.random()*3);
-      const h=1+Math.floor(Math.random()*3);
-      const c=1+Math.floor(Math.random()*Math.max(1,halfCols-w-1));
-      const r=1+Math.floor(Math.random()*Math.max(1,rows-h-2));
-      const positions=[];
-      for(let rr=r;rr<r+h&&rr<rows;rr++){
-        for(let cc=c;cc<c+w&&cc<cols;cc++){
-          if(!mask[rr][cc])positions.push([rr,cc]);
-          const mc=cols-1-cc;
-          if(mc!==cc&&mc<cols&&mc>=0&&!mask[rr][mc])positions.push([rr,mc]);
-        }
-      }
-      if(placed+positions.length>targetHoles+2)continue;
-      for(const [pr,pc] of positions){
-        if(placed>=targetHoles)break;
-        mask[pr][pc]=true;placed++;
-      }
-    }
-  } else {
-    // 4-quadrant mirror (very symmetric maze look)
-    while(placed<targetHoles&&safety-->0){
-      const halfCols=Math.floor(cols/2);
-      const halfRows=Math.floor(rows/2);
-      const w=1+Math.floor(Math.random()*2);
-      const h=1+Math.floor(Math.random()*2);
-      const c=1+Math.floor(Math.random()*Math.max(1,halfCols-w));
-      const r=1+Math.floor(Math.random()*Math.max(1,halfRows-h));
-      const positions=[];
-      for(let rr=r;rr<r+h;rr++){
-        for(let cc=c;cc<c+w;cc++){
-          const quads=[[rr,cc],[rr,cols-1-cc],[rows-1-rr,cc],[rows-1-rr,cols-1-cc]];
-          for(const [pr,pc] of quads){
-            if(pr>=0&&pr<rows&&pc>=0&&pc<cols&&!mask[pr][pc]){
-              positions.push([pr,pc]);
-            }
-          }
-        }
-      }
-      // Dedupe
-      const seen=new Set();
-      const uniq=[];
-      for(const [pr,pc] of positions){
-        const k=pr+','+pc;
-        if(!seen.has(k)){seen.add(k);uniq.push([pr,pc]);}
-      }
-      if(placed+uniq.length>targetHoles+3)continue;
-      for(const [pr,pc] of uniq){
-        if(placed>=targetHoles)break;
-        if(!mask[pr][pc]){mask[pr][pc]=true;placed++;}
-      }
-    }
+    mask.push(arr);
   }
-  // Fallback: random fill if not enough placed
-  while(placed<targetHoles&&safety-->0){
-    const c=1+Math.floor(Math.random()*(cols-2));
-    const r=1+Math.floor(Math.random()*(rows-2));
-    if(!mask[r][c]){mask[r][c]=true;placed++;}
-  }
-  return mask;
+  return {rows,cols,mask,total,name:tmpl.name};
 }
-
-// ==================== Board generation & Path-finding ====================
+function pickPoolConfig(total){
+  if(total>=8&&total%4===0&&total/4<=MAX_TYPES)return {copies:4,types:total/4};
+  if(total>=4&&total%2===0&&total/2<=MAX_TYPES)return {copies:2,types:total/2};
+  return null;
+}
 function generateBoard(){
-  const d=DIFF[curDiff];
-  for(let attempt=0;attempt<25;attempt++){
-    const mask=generateMask(d.rows,d.cols,d.holes);
-    // Count playable cells
-    let cellCount=0;
-    for(let r=0;r<d.rows;r++)for(let c=0;c<d.cols;c++)if(!mask[r][c])cellCount++;
-    if(cellCount!==d.total){
-      // Fallback: just retry
-      continue;
+  const templates=TEMPLATES[curDiff];
+  let lastTemplate=curTemplate;
+  for(let attempt=0;attempt<40;attempt++){
+    // Pick a template, prefer different from last to add variety
+    let tmpl;
+    if(templates.length>1&&attempt<8){
+      // Prefer different from last
+      const candidates=templates.filter(t=>t.name!==lastTemplate);
+      tmpl=candidates[Math.floor(Math.random()*candidates.length)];
+    } else {
+      tmpl=templates[Math.floor(Math.random()*templates.length)];
     }
+    const parsed=parseTemplate(tmpl);
+    const config=pickPoolConfig(parsed.total);
+    if(!config)continue;
+    ROWS=parsed.rows;COLS=parsed.cols;
+    GRID_ROWS=ROWS+2;GRID_COLS=COLS+2;
+    TOTAL=parsed.total;
+    NUM_TYPES=config.types;COPIES=config.copies;
+    curTemplate=tmpl.name;
     const tiles=[];
-    for(let i=1;i<=d.types;i++)for(let j=0;j<d.copies;j++)tiles.push(i);
+    for(let i=1;i<=NUM_TYPES;i++)for(let j=0;j<COPIES;j++)tiles.push(i);
     for(let i=tiles.length-1;i>0;i--){
       const j=Math.floor(Math.random()*(i+1));
       [tiles[i],tiles[j]]=[tiles[j],tiles[i]];
     }
     const b=[];
-    for(let r=0;r<d.rows+2;r++)b.push(new Array(d.cols+2).fill(0));
+    for(let r=0;r<GRID_ROWS;r++)b.push(new Array(GRID_COLS).fill(0));
     let idx=0;
-    for(let r=0;r<d.rows;r++)for(let c=0;c<d.cols;c++){
-      if(!mask[r][c])b[r+1][c+1]=tiles[idx++];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(parsed.mask[r][c])b[r+1][c+1]=tiles[idx++];
     }
     if(findAnyPair(b))return b;
   }
-  // Final fallback: no holes
+  // Fallback: simple rectangle 8x6
+  const fr=6,fc=8,fTotal=fr*fc;
+  ROWS=fr;COLS=fc;GRID_ROWS=fr+2;GRID_COLS=fc+2;TOTAL=fTotal;
+  const cfg=pickPoolConfig(fTotal);
+  NUM_TYPES=cfg.types;COPIES=cfg.copies;curTemplate='기본';
   const tiles=[];
-  for(let i=1;i<=d.types;i++)for(let j=0;j<d.copies;j++)tiles.push(i);
+  for(let i=1;i<=NUM_TYPES;i++)for(let j=0;j<COPIES;j++)tiles.push(i);
   for(let i=tiles.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
     [tiles[i],tiles[j]]=[tiles[j],tiles[i]];
   }
   const b=[];
-  for(let r=0;r<d.rows+2;r++)b.push(new Array(d.cols+2).fill(0));
+  for(let r=0;r<GRID_ROWS;r++)b.push(new Array(GRID_COLS).fill(0));
   let idx=0;
-  for(let r=0;r<d.rows&&idx<tiles.length;r++)for(let c=0;c<d.cols&&idx<tiles.length;c++){
-    b[r+1][c+1]=tiles[idx++];
-  }
+  for(let r=1;r<=ROWS;r++)for(let c=1;c<=COLS;c++)b[r][c]=tiles[idx++];
   return b;
 }
 
+// ==================== Path-finding ====================
 function hClearBetween(g,r,ca,cb){
   const lo=Math.min(ca,cb),hi=Math.max(ca,cb);
   for(let c=lo+1;c<hi;c++)if(g[r][c]!==0)return false;
@@ -691,8 +867,6 @@ function findAnyPair(g){
   }
   return null;
 }
-
-// Count all currently matchable pairs
 function countMatchablePairs(g){
   let count=0;
   const byType={};
@@ -705,9 +879,7 @@ function countMatchablePairs(g){
     const list=byType[t];
     for(let i=0;i<list.length;i++){
       for(let j=i+1;j<list.length;j++){
-        if(canConnect(g,list[i][0],list[i][1],list[j][0],list[j][1])){
-          count++;
-        }
+        if(canConnect(g,list[i][0],list[i][1],list[j][0],list[j][1]))count++;
       }
     }
   }
@@ -748,6 +920,7 @@ function startGame(){
     else btn.innerHTML='🔊';
   }
   document.getElementById('diffLabelMini').textContent=DIFF[curDiff].name;
+  document.getElementById('patternName').textContent='패턴: '+curTemplate;
   resetGame();
 }
 
@@ -762,6 +935,7 @@ function resetGame(){
   shufflesLeft=DIFF[curDiff].shuffles;
   document.getElementById('hintLeft').textContent=hintsLeft;
   document.getElementById('shuffleLeft').textContent=shufflesLeft;
+  document.getElementById('patternName').textContent='패턴: '+curTemplate;
   if(comboTimer){clearTimeout(comboTimer);comboTimer=null;}
   document.getElementById('winnerOverlay').classList.remove('show');
   const svg=document.getElementById('pathSvg');
@@ -812,7 +986,7 @@ function updateTimer(){
 }
 
 function fitBoard(){
-  const padFactor=1.1; // accounts for board-wrap padding (0.5*ts each side) + border
+  const padFactor=1.1;
   const maxW=Math.min(window.innerWidth-12,1320);
   const maxH=Math.max(window.innerHeight-200,260);
   const tsW=Math.floor(maxW/(COLS+padFactor));
@@ -881,7 +1055,7 @@ function makeTileEl(r,c,t){
   el.style.top=((r-1)*tileSize)+'px';
   el.style.width=tileSize+'px';
   el.style.height=tileSize+'px';
-  el.textContent=TILES[t-1];
+  el.textContent=TILES[(t-1)%TILES.length];
   el.addEventListener('click',()=>onTileClick(r,c,el));
   return el;
 }
@@ -922,7 +1096,6 @@ function onTileClick(r,c,el){
     const a=selected;
     el.classList.add('selected');
     drawPath(path);
-    // Fire sound + start removal almost immediately for punch
     comboCount++;
     if(comboCount>=2){
       sfxCombo(comboCount);
@@ -975,15 +1148,12 @@ function drawPath(path){
   const points=path.map(([r,c])=>[(c-0.5)*tileSize,(r-0.5)*tileSize]);
   const d=points.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
   const NS='http://www.w3.org/2000/svg';
-  // Soft blur trail (afterimage)
   const trail=document.createElementNS(NS,'path');
   trail.setAttribute('d',d);trail.setAttribute('class','path-trail');
   svg.appendChild(trail);
-  // Outer golden glow
   const glow=document.createElementNS(NS,'path');
   glow.setAttribute('d',d);glow.setAttribute('class','path-glow');
   svg.appendChild(glow);
-  // Bright white core
   const core=document.createElementNS(NS,'path');
   core.setAttribute('d',d);core.setAttribute('class','path-core');
   svg.appendChild(core);
@@ -1018,13 +1188,9 @@ function updateMatchableUI(){
     void el.offsetWidth;
     el.classList.add('matchable-pulse');
   }
-  if(count===0){
-    el.style.color='#ff6a6a';
-  } else if(count<=2){
-    el.style.color='#ffaa3a';
-  } else {
-    el.style.color='#7ddb8f';
-  }
+  if(count===0)el.style.color='#ff6a6a';
+  else if(count<=2)el.style.color='#ffaa3a';
+  else el.style.color='#7ddb8f';
 }
 
 function showWinner(iWon){
@@ -1035,7 +1201,7 @@ function showWinner(iWon){
   const m=String(Math.floor(sec/60)).padStart(2,'0');
   const ss=String(sec%60).padStart(2,'0');
   t.textContent=iWon?'🎉 승리!':'😭 패배';
-  s.innerHTML=`난이도: <b>${DIFF[curDiff].name}</b> (${TOTAL}장)<br>내가 깬 패: <b>${myCleared}</b> · 상대가 깬 패: <b>${oppCleared}</b><br>경과 시간: ${m}:${ss}`;
+  s.innerHTML=`난이도: <b>${DIFF[curDiff].name}</b> · 패턴: <b>${curTemplate}</b> (${TOTAL}장)<br>내가 깬 패: <b>${myCleared}</b> · 상대가 깬 패: <b>${oppCleared}</b><br>경과 시간: ${m}:${ss}`;
   o.classList.add('show');
 }
 
