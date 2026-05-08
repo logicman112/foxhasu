@@ -250,7 +250,13 @@ const HADO_DMG=12,SHORYU_DMG=15,PUNCH_DMG=6,KICK_DMG=9;
 // Gomu Gomu (Luffy) skills
 const GOMU_PISTOL_DMG=16, GOMU_PISTOL_REACH=280;
 const GOMU_BAZOOKA_DMG=22, GOMU_BAZOOKA_REACH=210;
-const GOMU_SHIELD_DUR=2.5;
+const GOMU_SHIELD_DUR=5.0;
+// Dokebi (도깨비 참수) - sword + 앞↓앞 + A
+const DOKEBI_DMG=32;          // 2x 고무고무총
+const DOKEBI_COOLDOWN=15;     // seconds
+const DOKEBI_CHARGE=1.0;      // seconds before tremor
+const DOKEBI_TREMOR=0.35;     // seconds of vibration
+const DOKEBI_AFTER=0.55;      // seconds of recovery
 const HADO_SPEED=6.5;
 // Hitbox dimensions (pixels). Reach = extend in front from attacker center
 const PUNCH_REACH=40;
@@ -443,6 +449,39 @@ function sfxGomuShield(){
   // Rubber bounce
   setTimeout(()=>{tone(220,0.18,'square',0.07,1100);},250);
 }
+// Dokebi sound effects
+function sfxDokebiCharge(){
+  // Ominous low rising hum + dark whisper
+  tone(80,0.7,'sawtooth',0.10,200);
+  tone(120,0.7,'square',0.07,260,0.05);
+  tone(60,0.8,'sine',0.08,160,0.10);
+  noise(0.6,0.04,500);
+  // Distant gong
+  setTimeout(()=>{tone(220,0.4,'triangle',0.07,80);tone(440,0.3,'sine',0.05,200,0.05);},200);
+}
+function sfxDokebiTremor(){
+  // Rapid vibrato arpeggio - building tension
+  for(let i=0;i<5;i++){
+    setTimeout(()=>{
+      tone(440+i*120,0.05,'square',0.06,800-i*100);
+      noise(0.04,0.04,4000);
+    },i*60);
+  }
+}
+function sfxDokebiSlash(){
+  // Powerful slash crack + thunderous boom
+  noise(0.06,0.14,9000);
+  tone(2400,0.06,'square',0.10,400);
+  tone(1600,0.05,'triangle',0.08,300,0.02);
+  // Boom aftermath
+  setTimeout(()=>{
+    tone(60,0.30,'sawtooth',0.14,30);
+    tone(140,0.20,'square',0.10,80,0.03);
+    noise(0.30,0.10,1200);
+  },40);
+  // Sword chime tail
+  setTimeout(()=>{tone(2800,0.18,'sine',0.06,1800);tone(3500,0.20,'sine',0.04,2400,0.04);},120);
+}
 function sfxPumpHit(){tone(1200,0.04,'square',0.05);}
 function sfxPumpMiss(){tone(200,0.08,'sawtooth',0.06,100);}
 function sfxRoundWin(){tone(523,0.12,'triangle',0.08);setTimeout(()=>tone(659,0.12,'triangle',0.08),120);setTimeout(()=>tone(784,0.18,'triangle',0.09),240);}
@@ -634,6 +673,39 @@ function handleMsg(d){
       dmg:d.dmg,r:14,life:120,
       hue:d.owner===0?210:330,pulse:0
     });
+  } else if(d.type==='dokebiTeleport'){
+    // Opp performed dokebi teleport, spawn afterimages + slash effects
+    const startX=d.startX, endX=d.endX, oy=d.y, fac=d.facing;
+    shake(12);
+    flash('255,255,255',0.4);
+    const t2=performance.now()/1000;
+    const aPose=getPose({state:'dokebi',stateTime:DOKEBI_CHARGE+DOKEBI_TREMOR+0.05,facing:fac,crouching:false,blocking:false,items:opp?opp.items:new Set(['sword'])},t2);
+    const numAfter=10;
+    for(let i=0;i<numAfter;i++){
+      const ax=startX+(endX-startX)*(i/numAfter);
+      afterimages.push({
+        x:ax,y:oy,facing:fac,
+        pose:aPose,
+        life:24-i*1.5,maxLife:24,
+        color:`rgba(${140+i*8},${50+i*6},${200-i*8},1)`
+      });
+    }
+    const slashY=oy-50;
+    for(let i=0;i<28;i++){
+      const tt=i/27;
+      const sx=startX+(endX-startX)*tt;
+      spawnP({x:sx,y:slashY+(Math.random()-0.5)*55,
+        vx:fac*(2+Math.random()*4),vy:(Math.random()-0.5)*3,
+        life:25,maxLife:25,type:'arc',
+        color:'rgba(220,200,255,1)',gravity:0});
+    }
+    spawnP({x:startX,y:slashY,vx:0,vy:0,
+      life:22,maxLife:22,type:'shockwave',color:'rgba(170,80,255,0.95)',size:5,maxR:70,gravity:0});
+    spawnP({x:(startX+endX)/2,y:slashY,vx:0,vy:0,
+      life:18,maxLife:18,type:'star',color:'#aa44ff',size:22,rot:0,rotV:0.5,gravity:0});
+    spawnP({x:endX,y:slashY,vx:0,vy:0,
+      life:25,maxLife:25,type:'shockwave',color:'rgba(180,80,255,0.95)',size:5,maxR:90,gravity:0});
+    if(typeof sfxDokebiSlash==='function')sfxDokebiSlash();
   } else if(d.type==='itemGet'){
     // Opp got item
     if(opp){opp.items=new Set([...opp.items||new Set(),d.item]);applyItemEffects(opp);}
@@ -682,7 +754,10 @@ function newPlayer(idx){
     running:false, // run mode while holding forward after double tap
     skillBanner:null, // {text,color,time}
     _lastBannerState:null, // tracks state changes for opp banner detection
-    balloonShield:false // active during 고무고무 방패
+    balloonShield:false, // active during 고무고무 방패
+    dokebiCooldown:0, // 도깨비 참수 cooldown
+    dokebiPhase:null, // 'charge' | 'tremor' | 'recover'
+    dokebiTargetX:0  // teleport destination
   };
 }
 function applyItemEffects(p){
@@ -787,7 +862,9 @@ function updateMe(dt){
   if(me.state==='dead')return;
   recordDirPress();
   // Auto-face opp
-  if(me.onGround && !['punch','kick','hadouken','shoryuken','hit','gomupistol','gomubazooka','gomushield'].includes(me.state) && opp){
+  // Decay dokebi cooldown
+  if(me.dokebiCooldown>0)me.dokebiCooldown=Math.max(0,me.dokebiCooldown-dt);
+  if(me.onGround && !['punch','kick','hadouken','shoryuken','hit','gomupistol','gomubazooka','dokebi'].includes(me.state) && opp){
     me.facing=opp.x>me.x?1:-1;
   }
   // Block: shield+L OR holding back direction (back-walk = guard, like classic 2D fighters)
@@ -796,13 +873,13 @@ function updateMe(dt){
   const blockingByShield=me.items.has('shield')&&held(KB.block)&&me.onGround;
   me.blocking=(blockingByBack||blockingByShield)&&me.state!=='hit';
   // Crouching: hold ↓ on ground, while not attacking/hit
-  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','gomushield'].includes(me.state);
+  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi'].includes(me.state);
 
   // ===== Double-tap detection (forward/back dash) =====
   const nowMs=performance.now();
   const fwdKey=me.facing>0?KB.right:KB.left;
   const backKey=me.facing>0?KB.left:KB.right;
-  const skipDash=['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield'].includes(me.state);
+  const skipDash=['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','dokebi'].includes(me.state);
   // Forward dash (must be CONSECUTIVE forward presses without down/back in between)
   if(KP[fwdKey] && me.onGround && !skipDash){
     const hist=me.inputHistory;
@@ -855,7 +932,7 @@ function updateMe(dt){
     }
   }
   // Movement
-  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','gomushield'].includes(me.state)){
+  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi'].includes(me.state)){
     let dx=0;
     if(held(KB.left))dx-=1;
     if(held(KB.right))dx+=1;
@@ -918,11 +995,18 @@ function updateMe(dt){
   if(me.onGround && me.items.has('jacket')) me.flyTime=2;
   else if(me.onGround) me.flyTime=0;
   // Attacks (block during special states)
-  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield'].includes(me.state)){
+  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield','dokebi'].includes(me.state)){
     if(pressed(KB.punch)){
       const sp=checkSpecial();
       if(sp==='shoryuken'){
         if(me.items.has('straw'))startGomuBazooka();
+        else if(me.items.has('sword')){
+          // 도깨비 참수: cooldown gate
+          if(me.dokebiCooldown>0){
+            toast('도깨비 참수 쿨다운: '+Math.ceil(me.dokebiCooldown)+'초',1200);
+            startPunch();
+          } else startDokebi();
+        }
         else startShoryuken();
       } else if(sp==='hadouken'){
         if(me.items.has('straw'))startGomuPistol();
@@ -1014,6 +1098,7 @@ function updateMe(dt){
   else if(me.state==='gomupistol'&&me.stateTime>0.7)me.state='idle';
   else if(me.state==='gomubazooka'&&me.stateTime>0.7)me.state='idle';
   else if(me.state==='gomushield'&&me.stateTime>GOMU_SHIELD_DUR)me.state='idle';
+  else if(me.state==='dokebi'&&me.stateTime>(DOKEBI_CHARGE+DOKEBI_TREMOR+DOKEBI_AFTER))me.state='idle';
   else if(me.state==='hit'&&me.stateTime>(me.hitDuration||0.3))me.state='idle';
   if(me.state==='shoryuken'&&me.stateTime<0.05){
     me.vy=-11;me.vx=me.facing*3.5;me.onGround=false;
@@ -1066,6 +1151,8 @@ function updateMe(dt){
   if(me.state==='idle'&&Math.abs(me.vx)>0.3&&me.onGround)me.state='walk';
   else if(me.state==='walk'&&Math.abs(me.vx)<0.2)me.state='idle';
   if(!me.onGround&&['idle','walk'].includes(me.state))me.state='jump';
+  // Dokebi update (charge → tremor → teleport → recover)
+  if(me.state==='dokebi')updateDokebi(dt);
 }
 
 function startPunch(){
@@ -1373,6 +1460,182 @@ function startGomuShield(){
     else me.balloonShield=false;
   },GOMU_SHIELD_DUR*1000);
   sendMsg({type:'attack',kind:'gomushield'});
+}
+// ===== 도깨비 참수 (검 + 앞↓앞 + A) =====
+function startDokebi(){
+  me.state='dokebi';me.stateTime=0;me.vx=0;
+  me.skillBanner={text:'도깨비 참수!!',color:'#aa44ff',time:0};
+  me.iframe=DOKEBI_CHARGE+DOKEBI_TREMOR+0.15;
+  me.dokebiTeleported=false;
+  me.dokebiTremor=0;
+  me.dokebiOriginX=me.x;
+  me.dokebiTargetX=Math.max(30,Math.min(W-30,me.x+me.facing*W*0.5));
+  me.dokebiCooldown=DOKEBI_COOLDOWN;
+  me.inputHistory=[];
+  sfxDokebiCharge();
+  flash('150,80,255',0.4);
+  shake(5);
+  // Initial dark aura burst
+  for(let k=0;k<22;k++){
+    const ang=Math.random()*Math.PI*2;
+    spawnP({x:me.x,y:me.y-30,
+      vx:Math.cos(ang)*(2+Math.random()*3),vy:Math.sin(ang)*2-1,
+      life:30,maxLife:30,type:'spark',color:k%2?'#aa44ff':'#ff4080',size:3,gravity:0.05});
+  }
+  spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
+    life:32,maxLife:32,type:'shockwave',
+    color:'rgba(170,80,255,0.85)',size:5,maxR:70,gravity:0});
+  sendMsg({type:'attack',kind:'dokebi'});
+}
+function updateDokebi(dt){
+  if(!me||me.state!=='dokebi')return;
+  const t=me.stateTime;
+  if(t<DOKEBI_CHARGE){
+    // Charge phase: dark spiral converging
+    me.vx=0;
+    if(Math.random()<0.7){
+      const ang=Math.random()*Math.PI*2;
+      const r=25+Math.random()*18;
+      spawnP({
+        x:me.x+Math.cos(ang)*r,y:me.y-30+Math.sin(ang)*r*0.7,
+        vx:-Math.cos(ang)*r*0.10,vy:-Math.sin(ang)*r*0.08,
+        life:14,maxLife:14,type:'energy',
+        color:Math.random()<0.5?'rgba(170,80,255,1)':'rgba(255,60,140,1)',
+        size:3+Math.random()*2,gravity:0
+      });
+    }
+    // Falling dark mist
+    if(Math.random()<0.4){
+      spawnP({
+        x:me.x+(Math.random()-0.5)*36,y:me.y-60-Math.random()*20,
+        vx:(Math.random()-0.5)*0.4,vy:0.3+Math.random()*0.4,
+        life:30,maxLife:30,type:'smoke',
+        size:5+Math.random()*3,gravity:0
+      });
+    }
+    // Eerie purple electric arcs around
+    if(Math.random()<0.20){
+      const ang=Math.random()*Math.PI*2;
+      spawnP({
+        x:me.x+Math.cos(ang)*22,y:me.y-30+Math.sin(ang)*30,
+        vx:Math.cos(ang)*10,vy:Math.sin(ang)*10,
+        life:6,maxLife:6,type:'arc',
+        color:'rgba(200,100,255,1)',gravity:0
+      });
+    }
+  } else if(t<DOKEBI_CHARGE+DOKEBI_TREMOR){
+    // Tremor phase: vibrate and intensify
+    me.vx=0;
+    me.dokebiTremor=(Math.random()-0.5)*5;
+    if(Math.random()<0.85){
+      const ang=Math.random()*Math.PI*2;
+      const r=15+Math.random()*10;
+      spawnP({
+        x:me.x+Math.cos(ang)*r,y:me.y-30+Math.sin(ang)*r,
+        vx:Math.cos(ang)*1.5,vy:Math.sin(ang)*1.2,
+        life:12,maxLife:12,type:'spark',
+        color:Math.random()<0.5?'#ff60aa':'#aa44ff',size:3+Math.random()*1.5,gravity:0
+      });
+    }
+    // Charge tone (only once at start)
+    if(!me._dokebiTremorSfx){me._dokebiTremorSfx=true;sfxDokebiTremor();}
+  } else if(!me.dokebiTeleported){
+    // ===== TELEPORT NOW =====
+    me.dokebiTeleported=true;
+    me.dokebiTremor=0;
+    me._dokebiTremorSfx=false;
+    const startX=me.dokebiOriginX;
+    const endX=me.dokebiTargetX;
+    sfxDokebiSlash();
+    shake(15);
+    flash('255,255,255',0.5);
+    freeze(0.13);
+    // Spawn afterimages along the path
+    const t2=performance.now()/1000;
+    const aPose=getPose({state:'dokebi',stateTime:DOKEBI_CHARGE+DOKEBI_TREMOR+0.05,facing:me.facing,crouching:false,blocking:false,items:me.items},t2);
+    const numAfter=10;
+    for(let i=0;i<numAfter;i++){
+      const ax=startX+(endX-startX)*(i/numAfter);
+      const lifeT=24-i*1.5;
+      afterimages.push({
+        x:ax,y:me.y,facing:me.facing,
+        pose:aPose,
+        life:lifeT,maxLife:24,
+        color:`rgba(${140+i*8},${50+i*6},${200-i*8},1)`
+      });
+    }
+    // Slash arcs across the path
+    const slashY=me.y-50;
+    for(let i=0;i<32;i++){
+      const tt=i/31;
+      const sx=startX+(endX-startX)*tt;
+      spawnP({
+        x:sx,y:slashY+(Math.random()-0.5)*55,
+        vx:me.facing*(2+Math.random()*4),vy:(Math.random()-0.5)*3,
+        life:25,maxLife:25,type:'arc',
+        color:'rgba(220,200,255,1)',gravity:0
+      });
+      if(i%2===0){
+        spawnP({
+          x:sx,y:slashY+(Math.random()-0.5)*30,vx:0,vy:0,
+          life:14,maxLife:14,type:'spark',
+          color:'#fff',size:5,gravity:0
+        });
+      }
+    }
+    // Shockwave at start (departure)
+    spawnP({x:startX,y:slashY,vx:0,vy:0,
+      life:22,maxLife:22,type:'shockwave',
+      color:'rgba(170,80,255,0.95)',size:5,maxR:70,gravity:0});
+    // Big star burst at midpoint
+    spawnP({x:(startX+endX)/2,y:slashY,vx:0,vy:0,
+      life:18,maxLife:18,type:'star',
+      color:'#aa44ff',size:22,rot:0,rotV:0.5,gravity:0});
+    // Shockwave at endpoint (arrival)
+    spawnP({x:endX,y:slashY,vx:0,vy:0,
+      life:25,maxLife:25,type:'shockwave',
+      color:'rgba(180,80,255,0.95)',size:5,maxR:90,gravity:0});
+    spawnP({x:endX,y:slashY,vx:0,vy:0,
+      life:18,maxLife:18,type:'shockwave',
+      color:'rgba(255,255,255,0.9)',size:3,maxR:55,gravity:0});
+    // Sword strike vertical line at endpoint (slash)
+    for(let i=0;i<14;i++){
+      spawnP({
+        x:endX+(Math.random()-0.5)*16,y:slashY-30+i*5,
+        vx:me.facing*(1+Math.random()),vy:0,
+        life:18,maxLife:18,type:'spark',
+        color:'#fff',size:4,gravity:0
+      });
+    }
+    // Hit check: opp in path, NOT jumping (in air), NOT crouching
+    if(opp&&opp.state!=='dead'){
+      const minX=Math.min(startX,endX), maxX=Math.max(startX,endX);
+      const oppInPath=(opp.x>=minX-25&&opp.x<=maxX+25);
+      const oppDodgedJump=!opp.onGround;
+      const oppDodgedCrouch=opp.crouching;
+      if(oppInPath&&!oppDodgedJump&&!oppDodgedCrouch){
+        sendMsg({type:'hit',dmg:DOKEBI_DMG,kbDir:me.facing,kind:'dokebi'});
+        // Massive impact at opp
+        for(let k=0;k<30;k++){
+          const ang=Math.random()*Math.PI*2;
+          spawnP({x:opp.x,y:opp.y-30,
+            vx:Math.cos(ang)*(3+Math.random()*6),vy:Math.sin(ang)*4-2,
+            life:35,maxLife:35,type:'spark',color:k%3===0?'#aa44ff':k%3===1?'#fff':'#ff60aa',size:5,gravity:0.15});
+        }
+        spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,
+          life:18,maxLife:18,type:'star',
+          color:'#ff4040',size:24,rot:0,rotV:0.6,gravity:0});
+        toast('💥 도깨비 참수 적중!',1500);
+      } else if(oppInPath){
+        toast('💨 도깨비 참수 회피!',1200);
+      }
+    }
+    // Send teleport to opp so they spawn afterimages on their screen
+    sendMsg({type:'dokebiTeleport',startX,endX,y:me.y,facing:me.facing});
+    // Actually move character
+    me.x=endX;
+  }
+  // Recovery phase: stay still, slash pose
 }
 function endGomuShield(){
   if(!me||me.state!=='gomushield')return;
@@ -2134,6 +2397,13 @@ function updateHUD(){
   for(const item of me.items){
     const div=document.createElement('div');
     div.className='item-icon';div.textContent=ITEM_ICONS[item];div.title=ITEM_NAMES[item];
+    if(item==='sword'&&me.dokebiCooldown>0){
+      div.style.position='relative';
+      const badge=document.createElement('div');
+      badge.style.cssText='position:absolute;bottom:-2px;right:-4px;background:#aa44ff;color:#fff;font-size:9px;padding:1px 4px;border-radius:6px;font-weight:bold;border:1px solid #fff';
+      badge.textContent=Math.ceil(me.dokebiCooldown);
+      div.appendChild(badge);
+    }
     myItemsEl.appendChild(div);
   }
   for(const item of opp.items){
@@ -2355,7 +2625,15 @@ function drawStickman(p){
   if(!p)return;
   const t=performance.now()/1000;
   ctx.save();
-  ctx.translate(p.x,p.y);
+  // Apply dokebi tremor offset during tremor phase (works for both me and opp)
+  let tremorX=0;
+  if(p.state==='dokebi'){
+    const tt=p.stateTime;
+    if(tt>=DOKEBI_CHARGE&&tt<DOKEBI_CHARGE+DOKEBI_TREMOR){
+      tremorX=(Math.random()-0.5)*5.5;
+    }
+  }
+  ctx.translate(p.x+tremorX,p.y);
   // Spin kick rotation (whole body spins around)
   if(p.state==='spinkick'){
     ctx.translate(0,-30);
@@ -2363,6 +2641,32 @@ function drawStickman(p){
     ctx.translate(0,30);
   }
   ctx.scale(p.facing,1);
+  // Dokebi charging dark aura
+  if(p.state==='dokebi'){
+    const tt=p.stateTime;
+    if(tt<DOKEBI_CHARGE+DOKEBI_TREMOR){
+      const phase=tt<DOKEBI_CHARGE?(tt/DOKEBI_CHARGE):1;
+      const intensity=0.4+phase*0.6;
+      // Outer ring
+      ctx.save();
+      ctx.strokeStyle=`rgba(170,80,255,${0.4*intensity})`;
+      ctx.lineWidth=2.5;
+      ctx.shadowBlur=14;ctx.shadowColor='#aa44ff';
+      const r1=24+Math.sin(t*8)*3;
+      ctx.beginPath();ctx.ellipse(0,-30,r1,r1*1.4,0,0,Math.PI*2);ctx.stroke();
+      // Inner hellfire arc rotating
+      ctx.strokeStyle=`rgba(255,80,160,${0.6*intensity})`;
+      ctx.lineWidth=3;
+      ctx.beginPath();
+      ctx.arc(0,-30,18,t*4,t*4+Math.PI*1.4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0,-30,18,t*4+Math.PI,t*4+Math.PI+Math.PI*1.4);
+      ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.restore();
+    }
+  }
   ctx.lineCap='round';ctx.lineJoin='round';
   // shadow
   ctx.fillStyle='rgba(0,0,0,0.3)';
@@ -3023,6 +3327,37 @@ function getPose(p,t){
     pose.lArm.j3={x:6+reach,y:-44};
     pose.head.x=2;
     pose.spine.top.x=1;
+  } else if(p.state==='dokebi'){
+    const tt=p.stateTime;
+    if(tt<DOKEBI_CHARGE){
+      // Charge: lowered stance, sword pulled back behind
+      pose.rArm.j2={x:-2,y:-44};
+      pose.rArm.j3={x:-12,y:-42};
+      pose.lArm.j2={x:3,y:-42};
+      pose.lArm.j3={x:6,y:-32};
+      pose.lLeg.j2={x:-4,y:-15};
+      pose.lLeg.j3={x:-8,y:0};
+      pose.rLeg.j2={x:6,y:-13};
+      pose.rLeg.j3={x:10,y:0};
+      pose.head.x=-1;pose.head.y=-52;
+      pose.spine.top.x=-1;
+    } else if(tt<DOKEBI_CHARGE+DOKEBI_TREMOR){
+      // Tremor: same as charge but with slight lean forward
+      pose.rArm.j2={x:0,y:-44};
+      pose.rArm.j3={x:-10,y:-44};
+      pose.lArm.j2={x:3,y:-42};
+      pose.lArm.j3={x:6,y:-32};
+      pose.head.x=0;pose.head.y=-53;
+      pose.spine.top.x=0;
+    } else {
+      // Recovery: forward slash follow-through (sword out front)
+      pose.rArm.j2={x:8,y:-44};
+      pose.rArm.j3={x:18,y:-30};
+      pose.lArm.j2={x:5,y:-42};
+      pose.lArm.j3={x:8,y:-32};
+      pose.head.x=2;pose.head.y=-54;
+      pose.spine.top.x=2;
+    }
   } else if(p.state==='gomushield'){
     // Compact pose tucked inside the inflated body
     pose.head={x:0,y:-32};
@@ -3276,12 +3611,15 @@ function tickSkillBanners(dt){
         if(cur==='gomupistol'){p.skillBanner={text:'고무고무 총!!',color:'#ff5050',time:0};sfxGomuPistol();}
         else if(cur==='gomubazooka'){p.skillBanner={text:'고무고무 바주카!!',color:'#ff8030',time:0};sfxGomuBazooka();}
         else if(cur==='gomushield'){p.skillBanner={text:'고무고무 방패!! (투사체 반사)',color:'#ffd060',time:0};sfxGomuShield();}
+        else if(cur==='dokebi'){p.skillBanner={text:'도깨비 참수!!',color:'#aa44ff',time:0};sfxDokebiCharge();}
         p._lastBannerState=cur;
       }
     }
     if(p.skillBanner){
       p.skillBanner.time+=dt;
-      if(p.skillBanner.time>1.5)p.skillBanner=null;
+      // Dokebi banner lasts longer (1.4s charge phase)
+      const maxTime=p.state==='dokebi'?1.6:1.5;
+      if(p.skillBanner.time>maxTime)p.skillBanner=null;
     }
   });
 }
