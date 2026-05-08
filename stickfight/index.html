@@ -1009,8 +1009,7 @@ function updateMe(dt){
         }
         else startShoryuken();
       } else if(sp==='hadouken'){
-        if(me.items.has('straw'))startGomuPistol();
-        else if(me.items.has('sword'))startSamchun();
+        if(me.items.has('sword'))startSamchun();
         else startHadouken();
       } else startPunch();
     } else if(pressed(KB.kick)){
@@ -2151,7 +2150,7 @@ function startRound(){
     sendMsg({type:'stage',stage:stageType});
   }
   rainDrops=[];
-  // Preserve items
+  // Preserve items only (everything else: position/HP/state/cooldowns reset)
   const myItems=me?Array.from(me.items):[];
   const oppItems=opp?Array.from(opp.items):[];
   me=newPlayer(myIdx);
@@ -2159,14 +2158,22 @@ function startRound(){
   me.items=new Set(myItems);
   opp.items=new Set(oppItems);
   applyItemEffects(me);applyItemEffects(opp);
+  // Wipe transient world state
   projectiles=[];particles=[];afterimages=[];
+  screenShake=0;screenFlash=0;hitFreeze=0;
   timeLeft=ROUND_TIME;
   roundOver=false;
+  gameRunning=false;
   nextPumpTime=PUMP_INTERVAL;
   pumpState=null;
   document.getElementById('myPumpBar').classList.remove('active');
+  // Clear any leftover key state that could stick from prior round
+  for(const k in KP)KP[k]=false;
   updateHUD();
   showRoundBanner('Round '+roundNum);
+  // Force immediate state sync so opp sees the fresh start position
+  lastSyncTime=0;
+  broadcastState();
   setTimeout(()=>{
     showCountdown('3',()=>{sfxCount();
       showCountdown('2',()=>{sfxCount();
@@ -2214,6 +2221,17 @@ function handleRoundEnd(winner){
   if(winner===myIdx){sfxRoundWin();showRoundBanner('🎉 라운드 승리!');}
   else if(winner>=0){sfxLose();showRoundBanner('😭 라운드 패배');}
   else showRoundBanner('무승부');
+  // Pose flash like host (winpose / dead) for visual consistency
+  setTimeout(()=>{
+    if(!me)return;
+    if(winner===myIdx){
+      me.state='winpose';me.stateTime=0;
+      me.vx=0;me.vy=0;
+    } else if(winner>=0){
+      me.state='dead';
+      me.vx=0;me.vy=0;
+    }
+  },150);
   setTimeout(()=>nextRound(winner),2200);
 }
 function nextRound(winner){
@@ -2320,7 +2338,10 @@ function grantRandomItem(){
     updateHUD();
     return;
   }
-  const available=ITEMS.filter(i=>!me.items.has(i));
+  let available=ITEMS.filter(i=>!me.items.has(i));
+  // Sword and straw are mutually exclusive: cannot own both at the same time
+  if(me.items.has('sword'))available=available.filter(i=>i!=='straw');
+  if(me.items.has('straw'))available=available.filter(i=>i!=='sword');
   if(available.length===0){
     me.hp=Math.min(me.maxhp,me.hp+30);
     toast('모든 아이템 보유! HP +30');
@@ -3705,6 +3726,13 @@ function loop(){
     updateProjectiles();
     updateParticles();
     updateHUD();
+    tickSkillBanners(dt);
+  } else if(!matchOver){
+    // Pre-round / countdown phase - keep positions and HUD synced
+    if(me)broadcastState();
+    updateParticles();
+    updateHUD();
+    tickSkillBanners(dt);
   }
   render();
   for(const k in KP)KP[k]=false;
