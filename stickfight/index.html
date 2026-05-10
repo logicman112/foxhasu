@@ -243,9 +243,11 @@ const ROUND_TIME=120;
 const PUMP_INTERVAL=10;
 const PUMP_TIME=6; // seconds to complete pump
 const PUMP_DURATION=PUMP_TIME;
-const ITEMS=['sword','hat','boots','shield','jacket','straw'];
-const ITEM_NAMES={sword:'⚔ 검',hat:'🎩 모자',boots:'👢 부츠',shield:'🛡 방패',jacket:'🧥 자켓',straw:'🌾 루피 밀짚모자'};
-const ITEM_ICONS={sword:'⚔',hat:'🎩',boots:'👢',shield:'🛡',jacket:'🧥',straw:'🌾'};
+const ITEMS=['sword','hat','boots','shield','jacket','straw','ironman'];
+const ITEM_NAMES={sword:'⚔ 검',hat:'🎩 모자',boots:'👢 부츠',shield:'🛡 방패',jacket:'🧥 자켓',straw:'🌾 루피 밀짚모자',ironman:'🤖 아이언맨 슈트'};
+const ITEM_ICONS={sword:'⚔',hat:'🎩',boots:'👢',shield:'🛡',jacket:'🧥',straw:'🌾',ironman:'🤖'};
+// Items that are mutually exclusive with each other (hero gear)
+const HERO_ITEMS=['sword','straw','ironman'];
 const HADO_DMG=12,SHORYU_DMG=15,PUNCH_DMG=6,KICK_DMG=9;
 // Gomu Gomu (Luffy) skills
 const GOMU_PISTOL_DMG=16, GOMU_PISTOL_REACH=280;
@@ -257,6 +259,11 @@ const DOKEBI_COOLDOWN=15;     // seconds
 const DOKEBI_CHARGE=1.0;      // seconds before tremor
 const DOKEBI_TREMOR=0.35;     // seconds of vibration
 const DOKEBI_AFTER=0.55;      // seconds of recovery
+// Ironman skills
+const IRONMAN_MISSILE_DMG=18;       // hadouken 12 * 1.5
+const IRONMAN_HOMING_DMG=9;         // per missile, 2 missiles total = 18 (kick x 2)
+const IRONMAN_LASER_DMG=24;         // hadouken * 2
+const IRONMAN_LASER_COOLDOWN=20;
 const HADO_SPEED=6.5;
 // Hitbox dimensions (pixels). Reach = extend in front from attacker center
 const PUNCH_REACH=40;
@@ -278,6 +285,7 @@ let bgFadeAlpha=0; // for round transition
 let projectiles=[]; // shared, both render
 let particles=[];
 let afterimages=[]; // {x,y,facing,state,stateTime,life,color,items}
+let ironmanBuddies=[]; // friend ironman descents from sky
 let screenShake=0;
 let screenFlash=0;
 let flashColor='255,255,255';
@@ -467,6 +475,50 @@ function sfxDokebiTremor(){
       noise(0.04,0.04,4000);
     },i*60);
   }
+}
+// Ironman suit sound effects
+function sfxIronmanMissile(){
+  // Mechanical lock + missile launch
+  tone(2200,0.04,'square',0.05,1400);
+  tone(800,0.06,'sawtooth',0.06,2400,0.02);
+  setTimeout(()=>{
+    // Whoosh launch
+    noise(0.18,0.10,3500);
+    tone(180,0.20,'sawtooth',0.10,80);
+    tone(420,0.15,'square',0.07,200,0.04);
+  },100);
+}
+function sfxIronmanHoming(){
+  // Back panel mechanism + dual launch
+  tone(1800,0.05,'square',0.05,900);
+  tone(700,0.05,'sawtooth',0.04,1400,0.03);
+  setTimeout(()=>{
+    noise(0.10,0.07,5000);
+    tone(900,0.10,'square',0.06,300);
+    tone(700,0.12,'sawtooth',0.06,200,0.02);
+  },80);
+  setTimeout(()=>{
+    noise(0.10,0.07,5000);
+    tone(1100,0.10,'square',0.06,400);
+    tone(800,0.12,'sawtooth',0.06,250,0.02);
+  },220);
+}
+function sfxIronmanLaserCharge(){
+  // High-pitched energy charge buildup
+  tone(440,0.5,'sine',0.06,1800);
+  tone(660,0.5,'triangle',0.05,2400,0.05);
+  tone(220,0.5,'sawtooth',0.04,880,0.10);
+}
+function sfxIronmanLaserFire(){
+  // Heavy thunderous laser blast
+  noise(0.30,0.16,2000);
+  tone(80,0.40,'sawtooth',0.18,40);
+  tone(220,0.30,'square',0.12,90,0.03);
+  tone(1200,0.20,'square',0.06,300,0.02);
+  setTimeout(()=>{
+    tone(60,0.35,'sine',0.14,30);
+    noise(0.25,0.10,1500);
+  },80);
 }
 function sfxDokebiSlash(){
   // Powerful slash crack + thunderous boom
@@ -667,12 +719,21 @@ function handleMsg(d){
     // Opponent says I got hit
     if(me)applyDamageToMe(d.dmg,d.kbDir,d.kind,!!d.bypass);
   } else if(d.type==='projectile'){
-    // Spawn projectile
-    projectiles.push({
-      x:d.x,y:d.y,vx:d.vx,owner:1-myIdx,
-      dmg:d.dmg,r:14,life:120,
-      hue:d.owner===0?210:330,pulse:0
-    });
+    // Spawn projectile (handle missile/homing kinds)
+    const kind=d.kind||'hadouken';
+    const proj={
+      x:d.x,y:d.y,vx:d.vx,vy:d.vy||0,owner:1-myIdx,
+      dmg:d.dmg,
+      r:kind==='homing'?6:kind==='missile'?9:14,
+      life:kind==='homing'?170:kind==='missile'?140:120,
+      hue:kind==='missile'?25:kind==='homing'?285:(d.owner===0?210:330),
+      pulse:0,kind:kind
+    };
+    if(kind==='homing'){proj.homingDelay=14;proj.targetTrack=true;}
+    projectiles.push(proj);
+  } else if(d.type==='ironmanlaser'){
+    // Opp summoned the buddy ironman; spawn the visual on our screen too
+    spawnIronmanBuddy(d.targetX,d.owner!==undefined?d.owner:(1-myIdx));
   } else if(d.type==='dokebiTeleport'){
     // Opp performed dokebi teleport, spawn afterimages + slash effects
     const startX=d.startX, endX=d.endX, oy=d.y, fac=d.facing;
@@ -757,7 +818,8 @@ function newPlayer(idx){
     balloonShield:false, // active during 고무고무 방패
     dokebiCooldown:0, // 도깨비 참수 cooldown
     dokebiPhase:null, // 'charge' | 'tremor' | 'recover'
-    dokebiTargetX:0  // teleport destination
+    dokebiTargetX:0,  // teleport destination
+    ironmanLaserCooldown:0 // 친구 아이언맨 레이저 cooldown
   };
 }
 function applyItemEffects(p){
@@ -864,7 +926,9 @@ function updateMe(dt){
   // Auto-face opp
   // Decay dokebi cooldown
   if(me.dokebiCooldown>0)me.dokebiCooldown=Math.max(0,me.dokebiCooldown-dt);
-  if(me.onGround && !['punch','kick','hadouken','shoryuken','hit','gomupistol','gomubazooka','dokebi'].includes(me.state) && opp){
+  // Decay dokebi cooldown
+  if(me.ironmanLaserCooldown>0)me.ironmanLaserCooldown=Math.max(0,me.ironmanLaserCooldown-dt);
+  if(me.onGround && !['punch','kick','hadouken','shoryuken','hit','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state) && opp){
     me.facing=opp.x>me.x?1:-1;
   }
   // Block: shield+L OR holding back direction (back-walk = guard, like classic 2D fighters)
@@ -873,13 +937,13 @@ function updateMe(dt){
   const blockingByShield=me.items.has('shield')&&held(KB.block)&&me.onGround;
   me.blocking=(blockingByBack||blockingByShield)&&me.state!=='hit';
   // Crouching: hold ↓ on ground, while not attacking/hit
-  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi'].includes(me.state);
+  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state);
 
   // ===== Double-tap detection (forward/back dash) =====
   const nowMs=performance.now();
   const fwdKey=me.facing>0?KB.right:KB.left;
   const backKey=me.facing>0?KB.left:KB.right;
-  const skipDash=['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','dokebi'].includes(me.state);
+  const skipDash=['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state);
   // Forward dash (must be CONSECUTIVE forward presses without down/back in between)
   if(KP[fwdKey] && me.onGround && !skipDash){
     const hist=me.inputHistory;
@@ -932,7 +996,7 @@ function updateMe(dt){
     }
   }
   // Movement
-  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi'].includes(me.state)){
+  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state)){
     let dx=0;
     if(held(KB.left))dx-=1;
     if(held(KB.right))dx+=1;
@@ -995,28 +1059,34 @@ function updateMe(dt){
   if(me.onGround && me.items.has('jacket')) me.flyTime=2;
   else if(me.onGround) me.flyTime=0;
   // Attacks (block during special states)
-  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield','dokebi'].includes(me.state)){
+  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state)){
     if(pressed(KB.punch)){
       const sp=checkSpecial();
       if(sp==='shoryuken'){
         if(me.items.has('straw'))startGomuBazooka();
         else if(me.items.has('sword')){
-          // 도깨비 참수: cooldown gate
           if(me.dokebiCooldown>0){
             toast('도깨비 참수 쿨다운: '+Math.ceil(me.dokebiCooldown)+'초',1200);
             startPunch();
           } else startDokebi();
         }
+        else if(me.items.has('ironman'))startIronmanHoming();
         else startShoryuken();
       } else if(sp==='hadouken'){
         if(me.items.has('sword'))startSamchun();
+        else if(me.items.has('ironman'))startIronmanMissile();
         else startHadouken();
       } else startPunch();
     } else if(pressed(KB.kick)){
       const sp=checkSpecial();
-      // Spin kick: forward, down, back + S
       if(sp==='spinkick'){
         if(me.items.has('straw'))startGomuShield();
+        else if(me.items.has('ironman')){
+          if(me.ironmanLaserCooldown>0){
+            toast('친구 아이언맨 쿨다운: '+Math.ceil(me.ironmanLaserCooldown)+'초',1200);
+            startKick();
+          } else startIronmanLaser();
+        }
         else startSpinKick();
       } else startKick();
     }
@@ -1098,6 +1168,9 @@ function updateMe(dt){
   else if(me.state==='gomubazooka'&&me.stateTime>0.7)me.state='idle';
   else if(me.state==='gomushield'&&me.stateTime>GOMU_SHIELD_DUR)me.state='idle';
   else if(me.state==='dokebi'&&me.stateTime>(DOKEBI_CHARGE+DOKEBI_TREMOR+DOKEBI_AFTER))me.state='idle';
+  else if(me.state==='ironmanmissile'&&me.stateTime>0.55)me.state='idle';
+  else if(me.state==='ironmanhoming'&&me.stateTime>0.70)me.state='idle';
+  else if(me.state==='ironmanlaser'&&me.stateTime>0.80)me.state='idle';
   else if(me.state==='hit'&&me.stateTime>(me.hitDuration||0.3))me.state='idle';
   if(me.state==='shoryuken'&&me.stateTime<0.05){
     me.vy=-11;me.vx=me.facing*3.5;me.onGround=false;
@@ -1636,6 +1709,346 @@ function updateDokebi(dt){
   }
   // Recovery phase: stay still, slash pose
 }
+// ===== Ironman suit skills =====
+function startIronmanMissile(){
+  // 뒤↓앞 + A : Missile from palm
+  me.state='ironmanmissile';me.stateTime=0;me.vx=0;
+  me.skillBanner={text:'🚀 미사일!!',color:'#ff7030',time:0};
+  me.iframe=0.05;
+  me.inputHistory=[];
+  sfxIronmanMissile();
+  flash('255,180,80',0.3);
+  shake(4);
+  // Wind-up sparks at hand
+  for(let i=0;i<8;i++){
+    setTimeout(()=>{
+      if(!me||me.state!=='ironmanmissile')return;
+      const f=me.facing, hx=me.x+f*22, hy=me.y-32;
+      const ang=Math.random()*Math.PI*2;
+      spawnP({x:hx+Math.cos(ang)*4,y:hy+Math.sin(ang)*4,
+        vx:Math.cos(ang)*0.6,vy:Math.sin(ang)*0.6,
+        life:8,maxLife:8,type:'spark',color:'#ffaa44',size:2,gravity:0});
+    },i*15);
+  }
+  // Launch projectile after windup
+  setTimeout(()=>{
+    if(roundOver||matchOver||!me||me.state!=='ironmanmissile')return;
+    const f=me.facing;
+    const proj={
+      x:me.x+f*26,y:me.y-50,
+      vx:f*HADO_SPEED,vy:0,owner:myIdx,
+      dmg:IRONMAN_MISSILE_DMG,r:9,life:140,
+      hue:25,pulse:0,kind:'missile'
+    };
+    projectiles.push(proj);
+    sendMsg({type:'projectile',x:proj.x,y:proj.y,vx:proj.vx,vy:0,dmg:proj.dmg,owner:myIdx,kind:'missile'});
+    flash('255,200,150',0.3);
+    shake(5);
+    // Launch flame burst back
+    for(let i=0;i<14;i++){
+      const ang=Math.random()*Math.PI*0.7+(f>0?Math.PI-0.35:-0.35);
+      const sp=2+Math.random()*4;
+      spawnP({x:proj.x,y:proj.y,
+        vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
+        life:22,maxLife:22,type:'spark',color:i%2?'#ff5040':'#ffaa44',size:3,gravity:0.05});
+    }
+    spawnP({x:proj.x,y:proj.y,vx:0,vy:0,life:18,maxLife:18,type:'shockwave',
+      color:'rgba(255,180,80,0.85)',size:5,maxR:35,gravity:0});
+  },200);
+  sendMsg({type:'attack',kind:'ironmanmissile'});
+}
+
+function startIronmanHoming(){
+  // 앞↓앞 + A : Two homing missiles from back
+  me.state='ironmanhoming';me.stateTime=0;me.vx=0;
+  me.skillBanner={text:'🎯 호밍 미사일!! ×2',color:'#aa44ff',time:0};
+  me.iframe=0.05;
+  me.inputHistory=[];
+  sfxIronmanHoming();
+  flash('200,150,255',0.3);
+  shake(4);
+  // Launch 2 missiles with slight delay
+  for(let i=0;i<2;i++){
+    setTimeout(()=>{
+      if(roundOver||matchOver||!me||me.state!=='ironmanhoming')return;
+      const f=me.facing;
+      // Spawn from back of player, going up-and-out
+      const proj={
+        x:me.x-f*5,y:me.y-58,
+        vx:f*1.5+(i===0?-0.5:0.5),
+        vy:-3.5,
+        owner:myIdx,
+        dmg:IRONMAN_HOMING_DMG,r:6,life:170,
+        hue:280+i*15,pulse:0,kind:'homing',
+        homingDelay:14,targetTrack:true,gravityFree:true
+      };
+      projectiles.push(proj);
+      sendMsg({type:'projectile',x:proj.x,y:proj.y,vx:proj.vx,vy:proj.vy,dmg:proj.dmg,owner:myIdx,kind:'homing'});
+      // Launch puff
+      for(let k=0;k<6;k++){
+        spawnP({x:proj.x,y:proj.y,
+          vx:(Math.random()-0.5)*2,vy:1+Math.random()*1.5,
+          life:14,maxLife:14,type:'smoke',size:4,gravity:0.05});
+      }
+      shake(3);
+    },180+i*220);
+  }
+  sendMsg({type:'attack',kind:'ironmanhoming'});
+}
+
+function startIronmanLaser(){
+  // 앞↓뒤 + S : Friend ironman descends + fires laser
+  me.state='ironmanlaser';me.stateTime=0;me.vx=0;
+  me.skillBanner={text:'🤖 친구 아이언맨!! 레이저 폭격',color:'#5a90ff',time:0};
+  me.iframe=0.30;
+  me.ironmanLaserCooldown=IRONMAN_LASER_COOLDOWN;
+  me.inputHistory=[];
+  sfxIronmanLaserCharge();
+  flash('120,160,255',0.4);
+  shake(5);
+  // Target opponent's current x position
+  const targetX=opp?opp.x:(me.x+me.facing*220);
+  // Spawn buddy locally + tell opp
+  spawnIronmanBuddy(targetX,myIdx);
+  sendMsg({type:'ironmanlaser',targetX,owner:myIdx});
+  sendMsg({type:'attack',kind:'ironmanlaser'});
+}
+
+function spawnIronmanBuddy(targetX,owner){
+  ironmanBuddies.push({
+    x:Math.max(60,Math.min(W-60,targetX)),
+    y:-90, // start above screen
+    targetY:55,
+    state:'descend',  // descend → charge → fire → ascend
+    timer:0,
+    owner:owner,
+    targetX:targetX
+  });
+}
+
+function updateIronmanBuddies(dt){
+  for(let i=ironmanBuddies.length-1;i>=0;i--){
+    const b=ironmanBuddies[i];
+    b.timer+=dt;
+    if(b.state==='descend'){
+      b.y+=4.5;
+      // Thruster smoke trail
+      if(Math.random()<0.5){
+        spawnP({x:b.x+(Math.random()-0.5)*8,y:b.y+12,
+          vx:(Math.random()-0.5)*0.5,vy:1.5+Math.random(),
+          life:20,maxLife:20,type:'smoke',size:5+Math.random()*2,gravity:0.05});
+      }
+      // Repulsor flame from feet
+      if(Math.random()<0.6){
+        spawnP({x:b.x-4+Math.random()*8,y:b.y+10,
+          vx:0,vy:1+Math.random(),
+          life:8,maxLife:8,type:'spark',color:'#88c8ff',size:2.5,gravity:0});
+      }
+      if(b.y>=b.targetY){
+        b.y=b.targetY;
+        b.state='charge';
+        b.timer=0;
+      }
+    } else if(b.state==='charge'){
+      // 0.7s charge - particles converging to chest reactor
+      if(Math.random()<0.85){
+        const ang=Math.random()*Math.PI*2;
+        const r=18+Math.random()*15;
+        spawnP({x:b.x+Math.cos(ang)*r,y:b.y+5+Math.sin(ang)*r,
+          vx:-Math.cos(ang)*r*0.10,vy:-Math.sin(ang)*r*0.08,
+          life:10,maxLife:10,type:'energy',color:'rgba(180,220,255,1)',size:3,gravity:0});
+      }
+      if(b.timer>0.7){
+        b.state='fire';b.timer=0;
+        sfxIronmanLaserFire();
+        flash('255,255,200',0.5);
+        shake(12);
+        freeze(0.10);
+        // Hit check at fire moment - opp must be near the laser column at ground level
+        if(b.owner===myIdx&&opp&&opp.state!=='dead'){
+          const inRange=Math.abs(opp.x-b.x)<55;
+          if(inRange){
+            sendMsg({type:'hit',dmg:IRONMAN_LASER_DMG,kbDir:opp.x>b.x?1:-1,kind:'ironmanlaser'});
+            // Big impact
+            for(let k=0;k<28;k++){
+              const ang=Math.random()*Math.PI*2;
+              spawnP({x:opp.x,y:opp.y-30,
+                vx:Math.cos(ang)*(3+Math.random()*5),vy:Math.sin(ang)*4-1,
+                life:32,maxLife:32,type:'spark',color:k%3===0?'#fff':k%3===1?'#ffe080':'#5a90ff',size:4,gravity:0.15});
+            }
+            spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,life:28,maxLife:28,type:'shockwave',
+              color:'rgba(180,220,255,0.95)',size:5,maxR:80,gravity:0});
+            spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,life:22,maxLife:22,type:'star',
+              color:'#ffe080',size:22,rot:0,rotV:0.5,gravity:0});
+          }
+        }
+        // Ground impact dust where laser hits
+        for(let k=0;k<18;k++){
+          spawnP({x:b.x+(Math.random()-0.5)*40,y:GROUND_Y-2,
+            vx:(Math.random()-0.5)*4,vy:-1-Math.random()*2,
+            life:30,maxLife:30,type:'smoke',size:6+Math.random()*3,gravity:-0.05});
+        }
+      }
+    } else if(b.state==='fire'){
+      // 0.4s firing
+      if(b.timer>0.4){
+        b.state='ascend';b.timer=0;
+      }
+    } else if(b.state==='ascend'){
+      b.y-=5;
+      if(Math.random()<0.5){
+        spawnP({x:b.x+(Math.random()-0.5)*8,y:b.y+12,
+          vx:0,vy:1.5,life:18,maxLife:18,type:'smoke',size:4,gravity:0.05});
+      }
+      if(b.y<-100){
+        ironmanBuddies.splice(i,1);
+      }
+    }
+  }
+}
+
+function drawIronmanBuddy(b){
+  const cx=b.x, cy=b.y;
+  // If firing, draw vertical laser beam first (behind buddy)
+  if(b.state==='fire'){
+    const t=b.timer/0.4;
+    const beamW=20+Math.sin(b.timer*40)*5;
+    const fade=t<0.1?t*10:t>0.85?(1-t)*7:1;
+    ctx.save();
+    // Outer wide glow
+    ctx.fillStyle=`rgba(255,200,80,${fade*0.30})`;
+    ctx.fillRect(cx-beamW*1.6,cy+10,beamW*3.2,GROUND_Y-cy-10);
+    // Mid orange
+    ctx.fillStyle=`rgba(255,220,120,${fade*0.55})`;
+    ctx.fillRect(cx-beamW*0.9,cy+10,beamW*1.8,GROUND_Y-cy-10);
+    // Inner yellow-white
+    ctx.fillStyle=`rgba(255,250,200,${fade*0.85})`;
+    ctx.fillRect(cx-beamW*0.5,cy+10,beamW,GROUND_Y-cy-10);
+    // White hot core
+    ctx.fillStyle=`rgba(255,255,255,${fade})`;
+    ctx.fillRect(cx-beamW*0.18,cy+10,beamW*0.36,GROUND_Y-cy-10);
+    // Top reactor flare on chest
+    ctx.fillStyle=`rgba(255,255,200,${fade})`;
+    ctx.beginPath();ctx.arc(cx,cy+4,beamW*0.4,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+  // Body shadow
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.25)';
+  ctx.beginPath();ctx.ellipse(cx,GROUND_Y-2,18,4,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // Friend mecha figure (original deep-blue/silver/orange design)
+  ctx.save();
+  ctx.translate(cx,cy);
+  // Body angular plate
+  const bodyGrd=ctx.createLinearGradient(-8,-2,8,12);
+  bodyGrd.addColorStop(0,'#3358d4');
+  bodyGrd.addColorStop(0.5,'#1e3a8a');
+  bodyGrd.addColorStop(1,'#0f2070');
+  ctx.fillStyle=bodyGrd;
+  ctx.strokeStyle='#06104a';ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(-7,-2);ctx.lineTo(-8,2);
+  ctx.lineTo(-9,12);ctx.lineTo(9,12);
+  ctx.lineTo(8,2);ctx.lineTo(7,-2);
+  ctx.closePath();ctx.fill();ctx.stroke();
+  // Silver shoulder caps
+  ctx.fillStyle='#c8ccd4';
+  ctx.beginPath();
+  ctx.moveTo(-10,-2);ctx.lineTo(-6,-3);ctx.lineTo(-6,2);ctx.lineTo(-10,3);
+  ctx.closePath();ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(10,-2);ctx.lineTo(6,-3);ctx.lineTo(6,2);ctx.lineTo(10,3);
+  ctx.closePath();ctx.fill();
+  // Body seam
+  ctx.strokeStyle='#9aa0aa';ctx.lineWidth=0.5;
+  ctx.beginPath();ctx.moveTo(0,-2);ctx.lineTo(0,12);ctx.stroke();
+  // Orange accent stripe
+  ctx.fillStyle='#ff7030';
+  ctx.shadowBlur=3;ctx.shadowColor='#ff7030';
+  ctx.fillRect(-3,8,6,1.2);
+  ctx.shadowBlur=0;
+  // Chest reactor (silver bezel + orange/gold core)
+  ctx.fillStyle='#aab0bc';
+  ctx.beginPath();ctx.arc(0,4,3.4,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#1a1a1a';
+  ctx.beginPath();ctx.arc(0,4,2.7,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(255,160,40,0.95)';
+  ctx.shadowBlur=6;ctx.shadowColor='#ff7030';
+  ctx.beginPath();ctx.arc(0,4,2.1,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff5b8';
+  ctx.beginPath();ctx.arc(0,4,1,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;
+  // Helmet (octagonal blue)
+  const helmGrd=ctx.createLinearGradient(0,-15,0,-3);
+  helmGrd.addColorStop(0,'#3358d4');
+  helmGrd.addColorStop(1,'#1e3a8a');
+  ctx.fillStyle=helmGrd;
+  ctx.strokeStyle='#06104a';ctx.lineWidth=0.8;
+  ctx.beginPath();
+  ctx.moveTo(-3,-15);ctx.lineTo(3,-15);
+  ctx.lineTo(6,-12);ctx.lineTo(7,-7);
+  ctx.lineTo(6,-3);ctx.lineTo(-6,-3);
+  ctx.lineTo(-7,-7);ctx.lineTo(-6,-12);
+  ctx.closePath();ctx.fill();ctx.stroke();
+  // Silver lower jaw
+  ctx.fillStyle='#c8ccd4';
+  ctx.beginPath();
+  ctx.moveTo(-5,-6);ctx.lineTo(5,-6);
+  ctx.lineTo(4,-3);ctx.lineTo(-4,-3);
+  ctx.closePath();ctx.fill();
+  // Orange visor strip
+  ctx.fillStyle='#ff7030';
+  ctx.shadowBlur=4;ctx.shadowColor='#ff7030';
+  ctx.beginPath();
+  ctx.moveTo(-5,-9);ctx.lineTo(5,-9);
+  ctx.lineTo(4,-7);ctx.lineTo(-4,-7);
+  ctx.closePath();ctx.fill();
+  ctx.fillStyle='#fff5b8';
+  ctx.fillRect(-4,-8.5,8,0.5);
+  ctx.shadowBlur=0;
+  // Top crest
+  ctx.fillStyle='#c8ccd4';
+  ctx.beginPath();
+  ctx.moveTo(-1.5,-15);ctx.lineTo(1.5,-15);
+  ctx.lineTo(0.8,-17);ctx.lineTo(-0.8,-17);
+  ctx.closePath();ctx.fill();
+  // Arms (blue lines)
+  ctx.strokeStyle='#1e3a8a';ctx.lineWidth=2.8;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-7,2);ctx.lineTo(-10,12);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(7,2);ctx.lineTo(10,12);ctx.stroke();
+  // Silver gauntlets at hand
+  ctx.fillStyle='#c8ccd4';
+  ctx.fillRect(-12,11,4,3);
+  ctx.fillRect(8,11,4,3);
+  // Repulsor glow on hands during charge/fire
+  if(b.state==='charge'||b.state==='fire'){
+    const r=b.state==='fire'?3:2+Math.sin(b.timer*15)*0.8;
+    ctx.fillStyle='rgba(255,180,80,0.95)';
+    ctx.shadowBlur=6;ctx.shadowColor='#ff7030';
+    ctx.beginPath();ctx.arc(-10,13,r,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(10,13,r,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+  }
+  // Legs (blue)
+  ctx.strokeStyle='#1e3a8a';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(-4,12);ctx.lineTo(-5,20);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(4,12);ctx.lineTo(5,20);ctx.stroke();
+  // Silver boots
+  ctx.fillStyle='#c8ccd4';
+  ctx.fillRect(-7,19,4,3);
+  ctx.fillRect(3,19,4,3);
+  // Boot thrusters glow during descend/ascend
+  if(b.state==='descend'||b.state==='ascend'){
+    ctx.fillStyle='rgba(255,180,80,0.95)';
+    ctx.shadowBlur=6;ctx.shadowColor='#ff7030';
+    ctx.beginPath();ctx.arc(-5,22,2.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(5,22,2.5,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+  }
+  ctx.restore();
+}
+
 function endGomuShield(){
   if(!me||me.state!=='gomushield')return;
   me.state='idle';me.stateTime=0;
@@ -1978,29 +2391,82 @@ function updateProjectiles(){
   }
   for(let i=projectiles.length-1;i>=0;i--){
     const pr=projectiles[i];
+    // Homing logic - steer toward target
+    if(pr.kind==='homing'){
+      if(pr.homingDelay>0)pr.homingDelay--;
+      else {
+        const target=pr.owner===myIdx?opp:me;
+        if(target&&target.state!=='dead'){
+          const dx=target.x-pr.x;
+          const dy=(target.y-32)-pr.y;
+          const dist=Math.sqrt(dx*dx+dy*dy);
+          if(dist>1){
+            const desiredVx=(dx/dist)*5.0;
+            const desiredVy=(dy/dist)*5.0;
+            pr.vx+=(desiredVx-pr.vx)*0.10;
+            pr.vy=(pr.vy||0)+(desiredVy-(pr.vy||0))*0.10;
+          }
+        }
+      }
+      pr.y=(pr.y||0)+(pr.vy||0);
+    }
     pr.x+=pr.vx;
     pr.life--;
     pr.pulse=(pr.pulse||0)+0.3;
     // Trail particles
-    if(pr.life%2===0){
-      spawnP({
-        x:pr.x-pr.vx*0.5+(Math.random()-0.5)*4,y:pr.y+(Math.random()-0.5)*6,
-        vx:-pr.vx*0.15,vy:(Math.random()-0.5)*1,
-        life:14,maxLife:14,type:'energy',
-        color:`hsla(${pr.hue},100%,75%,1)`,size:4,gravity:0
-      });
+    if(pr.kind==='missile'){
+      // Bigger flame trail for missile
+      if(pr.life%2===0){
+        spawnP({
+          x:pr.x-pr.vx*0.6+(Math.random()-0.5)*3,y:pr.y+(Math.random()-0.5)*4,
+          vx:-pr.vx*0.18,vy:(Math.random()-0.5)*0.8,
+          life:14,maxLife:14,type:'spark',
+          color:Math.random()<0.5?'#ffaa44':'#ff5040',size:3,gravity:0
+        });
+      }
+      if(pr.life%4===0){
+        spawnP({
+          x:pr.x-pr.vx*0.5,y:pr.y+(Math.random()-0.5)*5,
+          vx:-pr.vx*0.10,vy:(Math.random()-0.5)*0.5,
+          life:18,maxLife:18,type:'smoke',size:4+Math.random()*2,gravity:-0.02
+        });
+      }
+    } else if(pr.kind==='homing'){
+      // Smoke + spark trail for homing
+      if(pr.life%2===0){
+        spawnP({
+          x:pr.x-pr.vx*0.5+(Math.random()-0.5)*3,y:pr.y-(pr.vy||0)*0.5+(Math.random()-0.5)*3,
+          vx:-pr.vx*0.15,vy:-(pr.vy||0)*0.15,
+          life:12,maxLife:12,type:'spark',color:'#cc88ff',size:2.5,gravity:0
+        });
+      }
+      if(pr.life%4===0){
+        spawnP({
+          x:pr.x-pr.vx*0.4,y:pr.y-(pr.vy||0)*0.4,
+          vx:0,vy:0,life:14,maxLife:14,type:'smoke',size:3+Math.random()*2,gravity:0
+        });
+      }
+    } else {
+      // Hadouken trail (existing)
+      if(pr.life%2===0){
+        spawnP({
+          x:pr.x-pr.vx*0.5+(Math.random()-0.5)*4,y:pr.y+(Math.random()-0.5)*6,
+          vx:-pr.vx*0.15,vy:(Math.random()-0.5)*1,
+          life:14,maxLife:14,type:'energy',
+          color:`hsla(${pr.hue},100%,75%,1)`,size:4,gravity:0
+        });
+      }
+      if(pr.life%6===0){
+        const ang=Math.random()*Math.PI*2;
+        spawnP({
+          x:pr.x,y:pr.y,
+          vx:Math.cos(ang)*15,vy:Math.sin(ang)*15,
+          life:5,maxLife:5,type:'arc',
+          color:`hsl(${pr.hue},100%,85%)`,gravity:0
+        });
+      }
     }
-    // Electric arcs occasionally
-    if(pr.life%6===0){
-      const ang=Math.random()*Math.PI*2;
-      spawnP({
-        x:pr.x,y:pr.y,
-        vx:Math.cos(ang)*15,vy:Math.sin(ang)*15,
-        life:5,maxLife:5,type:'arc',
-        color:`hsl(${pr.hue},100%,85%)`,gravity:0
-      });
-    }
-    if(pr.x<-30||pr.x>W+30||pr.life<=0){projectiles.splice(i,1);continue;}
+    if(pr.x<-30||pr.x>W+30||pr.y<-30||pr.y>H+30||pr.life<=0){projectiles.splice(i,1);continue;}
     if(pr.owner!==myIdx&&me&&me.state!=='dead'){
       // Use body box for proper collision (so crouching dodges)
       const body=getBodyBox(me);
@@ -2159,7 +2625,7 @@ function startRound(){
   opp.items=new Set(oppItems);
   applyItemEffects(me);applyItemEffects(opp);
   // Wipe transient world state
-  projectiles=[];particles=[];afterimages=[];
+  projectiles=[];particles=[];afterimages=[];ironmanBuddies=[];
   screenShake=0;screenFlash=0;hitFreeze=0;
   timeLeft=ROUND_TIME;
   roundOver=false;
@@ -2339,9 +2805,9 @@ function grantRandomItem(){
     return;
   }
   let available=ITEMS.filter(i=>!me.items.has(i));
-  // Sword and straw are mutually exclusive: cannot own both at the same time
-  if(me.items.has('sword'))available=available.filter(i=>i!=='straw');
-  if(me.items.has('straw'))available=available.filter(i=>i!=='sword');
+  // HERO_ITEMS (sword/straw/ironman) are mutually exclusive: only one at a time
+  const ownedHero=HERO_ITEMS.find(i=>me.items.has(i));
+  if(ownedHero)available=available.filter(i=>!(HERO_ITEMS.includes(i)&&i!==ownedHero));
   if(available.length===0){
     me.hp=Math.min(me.maxhp,me.hp+30);
     toast('모든 아이템 보유! HP +30');
@@ -2423,6 +2889,13 @@ function updateHUD(){
       const badge=document.createElement('div');
       badge.style.cssText='position:absolute;bottom:-2px;right:-4px;background:#aa44ff;color:#fff;font-size:9px;padding:1px 4px;border-radius:6px;font-weight:bold;border:1px solid #fff';
       badge.textContent=Math.ceil(me.dokebiCooldown);
+      div.appendChild(badge);
+    }
+    if(item==='ironman'&&me.ironmanLaserCooldown>0){
+      div.style.position='relative';
+      const badge=document.createElement('div');
+      badge.style.cssText='position:absolute;bottom:-2px;right:-4px;background:#5a90ff;color:#fff;font-size:9px;padding:1px 4px;border-radius:6px;font-weight:bold;border:1px solid #fff';
+      badge.textContent=Math.ceil(me.ironmanLaserCooldown);
       div.appendChild(badge);
     }
     myItemsEl.appendChild(div);
@@ -2816,67 +3289,428 @@ function drawStickman(p){
   ctx.moveTo(pose.spine.top.x,pose.spine.top.y);
   ctx.lineTo(pose.spine.bot.x,pose.spine.bot.y);
   ctx.stroke();
-  // Luffy red vest (worn over body when straw hat equipped)
+  // Original mecha suit chest (deep blue + silver + orange accent)
+  if(p.items.has('ironman')){
+    const sx=pose.spine.top.x, sy=pose.spine.top.y;
+    const bx=pose.spine.bot.x, by=pose.spine.bot.y;
+    ctx.save();
+    // Body plate - deep blue gradient with angular cuts
+    const bodyGrd=ctx.createLinearGradient(sx-12,sy-3,sx+12,by+5);
+    bodyGrd.addColorStop(0,'#3358d4');
+    bodyGrd.addColorStop(0.45,'#1e3a8a');
+    bodyGrd.addColorStop(1,'#0f2070');
+    ctx.fillStyle=bodyGrd;
+    ctx.strokeStyle='#06104a';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    // Octagonal cut chest plate
+    ctx.moveTo(sx-9,sy-2);
+    ctx.lineTo(sx-11,sy+2);
+    ctx.lineTo(sx-12,sy+8);
+    ctx.lineTo(sx-11,by+1);
+    ctx.lineTo(sx-9,by+5);
+    ctx.lineTo(sx+9,by+5);
+    ctx.lineTo(sx+11,by+1);
+    ctx.lineTo(sx+12,sy+8);
+    ctx.lineTo(sx+11,sy+2);
+    ctx.lineTo(sx+9,sy-2);
+    ctx.closePath();
+    ctx.fill();ctx.stroke();
+    // Silver shoulder armor
+    ctx.fillStyle='#c8ccd4';
+    ctx.beginPath();
+    ctx.moveTo(sx-13,sy-2);
+    ctx.lineTo(sx-7,sy-3);
+    ctx.lineTo(sx-7,sy+3);
+    ctx.lineTo(sx-13,sy+5);
+    ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#666';ctx.lineWidth=0.7;ctx.stroke();
+    ctx.fillStyle='#c8ccd4';
+    ctx.beginPath();
+    ctx.moveTo(sx+13,sy-2);
+    ctx.lineTo(sx+7,sy-3);
+    ctx.lineTo(sx+7,sy+3);
+    ctx.lineTo(sx+13,sy+5);
+    ctx.closePath();ctx.fill();ctx.stroke();
+    // Silver shoulder ridges (3 lines each)
+    ctx.strokeStyle='#888';ctx.lineWidth=0.5;
+    for(let i=0;i<3;i++){
+      ctx.beginPath();
+      ctx.moveTo(sx-12,sy+i*2);ctx.lineTo(sx-8,sy+i*2);
+      ctx.moveTo(sx+12,sy+i*2);ctx.lineTo(sx+8,sy+i*2);
+      ctx.stroke();
+    }
+    // Center vertical seam (silver)
+    ctx.strokeStyle='#9aa0aa';ctx.lineWidth=0.8;
+    ctx.beginPath();
+    ctx.moveTo((sx+bx)/2,sy);
+    ctx.lineTo((sx+bx)/2,by+3);
+    ctx.stroke();
+    // Mid horizontal seam
+    ctx.strokeStyle='#9aa0aa';ctx.lineWidth=0.5;
+    const midY=(sy+by)/2+4;
+    ctx.beginPath();
+    ctx.moveTo(sx-9,midY);ctx.lineTo(sx+9,midY);
+    ctx.stroke();
+    // Orange accent line (under reactor)
+    ctx.fillStyle='#ff7030';
+    ctx.shadowBlur=4;ctx.shadowColor='#ff7030';
+    ctx.fillRect(sx-4,midY-0.8,8,1.6);
+    ctx.shadowBlur=0;
+    // Belt hex panels
+    ctx.fillStyle='#9aa0aa';
+    for(let i=-1;i<=1;i++){
+      ctx.beginPath();
+      ctx.moveTo(bx+i*5-1.5,by+3);
+      ctx.lineTo(bx+i*5+1.5,by+3);
+      ctx.lineTo(bx+i*5+2,by+5);
+      ctx.lineTo(bx+i*5-2,by+5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // === REACTOR === silver outer ring + orange/gold core
+    const cx=(sx+bx)/2, cy=(sy+by)/2;
+    const pulse=0.75+Math.sin(t*3.5)*0.25;
+    // Outer silver bezel
+    ctx.fillStyle='#aab0bc';
+    ctx.beginPath();ctx.arc(cx,cy,5.2,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#444';ctx.lineWidth=0.6;
+    ctx.beginPath();ctx.arc(cx,cy,5.2,0,Math.PI*2);ctx.stroke();
+    // Inner shadow ring
+    ctx.fillStyle='#1a1a1a';
+    ctx.beginPath();ctx.arc(cx,cy,4.2,0,Math.PI*2);ctx.fill();
+    // Glowing orange core
+    ctx.fillStyle=`rgba(255,160,40,${pulse})`;
+    ctx.shadowBlur=8;ctx.shadowColor='#ff7030';
+    ctx.beginPath();ctx.arc(cx,cy,3.4,0,Math.PI*2);ctx.fill();
+    // White hot center
+    ctx.fillStyle='#fff5b8';
+    ctx.beginPath();ctx.arc(cx,cy,1.8,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+    // 6 spinning notch dots around core
+    const angOff=t*1.4;
+    ctx.fillStyle='#cc9c40';
+    for(let i=0;i<6;i++){
+      const a=angOff+i*Math.PI/3;
+      ctx.beginPath();
+      ctx.arc(cx+Math.cos(a)*4.3,cy+Math.sin(a)*4.3,0.7,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.strokeStyle=baseColor;ctx.fillStyle=baseColor;ctx.lineWidth=LW;
+  }
+  // Original swordsman's dark gi (robe) + red sash
+  if(p.items.has('sword')){
+    const sx=pose.spine.top.x, sy=pose.spine.top.y;
+    const bx=pose.spine.bot.x, by=pose.spine.bot.y;
+    ctx.save();
+    // Dark gi body - charcoal gradient
+    const giGrd=ctx.createLinearGradient(sx-10,sy,sx+10,by);
+    giGrd.addColorStop(0,'#28282e');
+    giGrd.addColorStop(0.5,'#16161a');
+    giGrd.addColorStop(1,'#0a0a0e');
+    ctx.fillStyle=giGrd;
+    ctx.strokeStyle='#000';ctx.lineWidth=1.2;
+    ctx.beginPath();
+    ctx.moveTo(sx-10,sy-1);
+    ctx.lineTo(sx+10,sy-1);
+    ctx.lineTo(sx+13,by+8);
+    ctx.lineTo(sx-13,by+8);
+    ctx.closePath();
+    ctx.fill();ctx.stroke();
+    // Inner collar (white V)
+    ctx.fillStyle='#e8e8e0';
+    ctx.beginPath();
+    ctx.moveTo(sx-4,sy);
+    ctx.lineTo(sx-2,sy+10);
+    ctx.lineTo(sx+2,sy+10);
+    ctx.lineTo(sx+4,sy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle='#888';ctx.lineWidth=0.5;ctx.stroke();
+    // Red sash (haramaki/obi)
+    const sashGrd=ctx.createLinearGradient(0,by-2,0,by+5);
+    sashGrd.addColorStop(0,'#cc2828');
+    sashGrd.addColorStop(0.5,'#a01818');
+    sashGrd.addColorStop(1,'#700808');
+    ctx.fillStyle=sashGrd;
+    ctx.strokeStyle='#400';ctx.lineWidth=0.8;
+    ctx.fillRect(bx-13,by-2,26,7);
+    ctx.strokeRect(bx-13,by-2,26,7);
+    // Sash knot on left side
+    ctx.fillStyle='#a01818';
+    ctx.beginPath();
+    ctx.ellipse(bx-14,by+1,5,4,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle='#400';ctx.stroke();
+    // Sash tail dangling
+    ctx.fillStyle='#a01818';
+    ctx.beginPath();
+    ctx.moveTo(bx-15,by+4);
+    ctx.lineTo(bx-19,by+10);
+    ctx.lineTo(bx-13,by+9);
+    ctx.closePath();
+    ctx.fill();
+    // Gold buckle in center
+    ctx.fillStyle='#d4a830';
+    ctx.fillRect(bx-2,by-1,4,5);
+    ctx.strokeStyle='#5a3a10';ctx.lineWidth=0.5;
+    ctx.strokeRect(bx-2,by-1,4,5);
+    ctx.restore();
+    ctx.strokeStyle=baseColor;ctx.fillStyle=baseColor;ctx.lineWidth=LW;
+  }
+  // Pirate red vest with yellow trim (more detailed)
   if(p.items.has('straw')){
     const sx=pose.spine.top.x, sy=pose.spine.top.y;
     const bx=pose.spine.bot.x, by=pose.spine.bot.y;
-    // Vest body: trapezoid from shoulders to hips
     ctx.save();
-    ctx.fillStyle='#c91e1e';
-    ctx.strokeStyle='#7a0808';
-    ctx.lineWidth=1.5;
+    // Open vest body with depth gradient
+    const vestGrd=ctx.createLinearGradient(sx-9,sy,sx+9,by);
+    vestGrd.addColorStop(0,'#e02828');
+    vestGrd.addColorStop(0.5,'#bb1818');
+    vestGrd.addColorStop(1,'#7a0808');
+    ctx.fillStyle=vestGrd;
+    ctx.strokeStyle='#5a0202';ctx.lineWidth=1.3;
     ctx.beginPath();
     ctx.moveTo(sx-7,sy);
     ctx.lineTo(sx+7,sy);
-    ctx.lineTo(bx+8,by+2);
-    ctx.lineTo(bx-8,by+2);
+    ctx.lineTo(sx+9,sy+8);
+    ctx.lineTo(bx+9,by+3);
+    ctx.lineTo(bx-9,by+3);
+    ctx.lineTo(sx-9,sy+8);
     ctx.closePath();
     ctx.fill();ctx.stroke();
-    // Open chest center (V-cut showing skin)
+    // Open chest V-cut
     ctx.fillStyle=baseColor;
     ctx.beginPath();
     ctx.moveTo(sx,sy);
-    ctx.lineTo(sx-3,sy+8);
-    ctx.lineTo(sx,by-2);
-    ctx.lineTo(sx+3,sy+8);
+    ctx.lineTo(sx-3,sy+9);
+    ctx.lineTo(sx,by-1);
+    ctx.lineTo(sx+3,sy+9);
     ctx.closePath();
     ctx.fill();
-    // Yellow trim on edges
-    ctx.strokeStyle='#ffd060';
-    ctx.lineWidth=1.2;
+    // X scar on chest (small)
+    ctx.strokeStyle='#7a3030';ctx.lineWidth=0.6;
     ctx.beginPath();
-    ctx.moveTo(sx-7,sy);ctx.lineTo(bx-8,by+2);
-    ctx.moveTo(sx+7,sy);ctx.lineTo(bx+8,by+2);
+    ctx.moveTo(sx-1,sy+10);ctx.lineTo(sx+1,sy+13);
+    ctx.moveTo(sx+1,sy+10);ctx.lineTo(sx-1,sy+13);
     ctx.stroke();
+    // Yellow trim along edges
+    ctx.strokeStyle='#ffd060';ctx.lineWidth=1.4;
+    ctx.beginPath();
+    ctx.moveTo(sx-7,sy);ctx.lineTo(sx-9,sy+8);ctx.lineTo(bx-9,by+3);
+    ctx.moveTo(sx+7,sy);ctx.lineTo(sx+9,sy+8);ctx.lineTo(bx+9,by+3);
+    ctx.stroke();
+    // Bottom yellow trim
+    ctx.beginPath();
+    ctx.moveTo(bx-9,by+3);ctx.lineTo(bx+9,by+3);
+    ctx.stroke();
+    // Yellow buttons
+    ctx.fillStyle='#ffd060';
+    ctx.beginPath();ctx.arc(sx-5,sy+4,0.8,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(sx-5.5,sy+9,0.8,0,Math.PI*2);ctx.fill();
     ctx.restore();
     ctx.strokeStyle=baseColor;ctx.fillStyle=baseColor;ctx.lineWidth=LW;
   }
   // Legs
   drawLimb(pose.lLeg);
   drawLimb(pose.rLeg);
-  // Boots
-  if(p.items.has('boots')){
-    ctx.fillStyle='#553a1a';
-    ctx.fillRect(pose.lLeg.j3.x-5,pose.lLeg.j3.y-2,10,5);
-    ctx.fillRect(pose.rLeg.j3.x-5,pose.rLeg.j3.y-2,10,5);
-    ctx.fillStyle=baseColor;
+  // Hakama pants overlay (swordsman) - dark gray/black flowing pants
+  if(p.items.has('sword')){
+    ctx.save();
+    ctx.strokeStyle='#1a1a20';ctx.lineWidth=5.5;ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(pose.lLeg.j1.x,pose.lLeg.j1.y);
+    ctx.lineTo(pose.lLeg.j2.x,pose.lLeg.j2.y);
+    ctx.lineTo(pose.lLeg.j3.x,pose.lLeg.j3.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pose.rLeg.j1.x,pose.rLeg.j1.y);
+    ctx.lineTo(pose.rLeg.j2.x,pose.rLeg.j2.y);
+    ctx.lineTo(pose.rLeg.j3.x,pose.rLeg.j3.y);
+    ctx.stroke();
+    // Faint gray highlight stripe down the side
+    ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(pose.lLeg.j1.x-1,pose.lLeg.j1.y);
+    ctx.lineTo(pose.lLeg.j3.x-1,pose.lLeg.j3.y);
+    ctx.moveTo(pose.rLeg.j1.x+1,pose.rLeg.j1.y);
+    ctx.lineTo(pose.rLeg.j3.x+1,pose.rLeg.j3.y);
+    ctx.stroke();
+    // Black tabi sandals
+    ctx.fillStyle='#0a0a0a';
+    ctx.fillRect(pose.lLeg.j3.x-5,pose.lLeg.j3.y-1.5,10,4);
+    ctx.fillRect(pose.rLeg.j3.x-5,pose.rLeg.j3.y-1.5,10,4);
+    ctx.restore();
+  }
+  // Pirate jeans overlay (denim blue)
+  if(p.items.has('straw')){
+    ctx.save();
+    ctx.strokeStyle='#3a5a8a';ctx.lineWidth=4.5;ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(pose.lLeg.j1.x,pose.lLeg.j1.y);
+    ctx.lineTo(pose.lLeg.j2.x,pose.lLeg.j2.y);
+    ctx.lineTo(pose.lLeg.j3.x,pose.lLeg.j3.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pose.rLeg.j1.x,pose.rLeg.j1.y);
+    ctx.lineTo(pose.rLeg.j2.x,pose.rLeg.j2.y);
+    ctx.lineTo(pose.rLeg.j3.x,pose.rLeg.j3.y);
+    ctx.stroke();
+    // Denim seam
+    ctx.strokeStyle='#2a4570';ctx.lineWidth=0.6;
+    ctx.beginPath();
+    ctx.moveTo(pose.lLeg.j1.x,pose.lLeg.j1.y);
+    ctx.lineTo(pose.lLeg.j3.x,pose.lLeg.j3.y);
+    ctx.moveTo(pose.rLeg.j1.x,pose.rLeg.j1.y);
+    ctx.lineTo(pose.rLeg.j3.x,pose.rLeg.j3.y);
+    ctx.stroke();
+    // Brown sandals
+    ctx.fillStyle='#7a4818';
+    ctx.fillRect(pose.lLeg.j3.x-5,pose.lLeg.j3.y-1.5,10,4);
+    ctx.fillRect(pose.rLeg.j3.x-5,pose.rLeg.j3.y-1.5,10,4);
+    ctx.restore();
+  }
+  // Mecha greaves (silver-blue with orange accent stripe)
+  if(p.items.has('ironman')){
+    ctx.save();
+    // Blue lower legs
+    ctx.strokeStyle='#1e3a8a';ctx.lineWidth=5;ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(pose.lLeg.j2.x,pose.lLeg.j2.y);
+    ctx.lineTo(pose.lLeg.j3.x,pose.lLeg.j3.y);
+    ctx.moveTo(pose.rLeg.j2.x,pose.rLeg.j2.y);
+    ctx.lineTo(pose.rLeg.j3.x,pose.rLeg.j3.y);
+    ctx.stroke();
+    // Blue upper legs (thinner)
+    ctx.lineWidth=4.5;
+    ctx.beginPath();
+    ctx.moveTo(pose.lLeg.j1.x,pose.lLeg.j1.y);
+    ctx.lineTo(pose.lLeg.j2.x,pose.lLeg.j2.y);
+    ctx.moveTo(pose.rLeg.j1.x,pose.rLeg.j1.y);
+    ctx.lineTo(pose.rLeg.j2.x,pose.rLeg.j2.y);
+    ctx.stroke();
+    // Silver knee plates
+    ctx.fillStyle='#c8ccd4';
+    ctx.beginPath();ctx.arc(pose.lLeg.j2.x,pose.lLeg.j2.y,3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(pose.rLeg.j2.x,pose.rLeg.j2.y,3,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#666';ctx.lineWidth=0.4;
+    ctx.beginPath();ctx.arc(pose.lLeg.j2.x,pose.lLeg.j2.y,3,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.arc(pose.rLeg.j2.x,pose.rLeg.j2.y,3,0,Math.PI*2);ctx.stroke();
+    // Silver boots with orange thruster glow
+    ctx.fillStyle='#c8ccd4';
+    ctx.fillRect(pose.lLeg.j3.x-6,pose.lLeg.j3.y-2.5,12,5);
+    ctx.fillRect(pose.rLeg.j3.x-6,pose.rLeg.j3.y-2.5,12,5);
+    ctx.strokeStyle='#666';ctx.lineWidth=0.5;
+    ctx.strokeRect(pose.lLeg.j3.x-6,pose.lLeg.j3.y-2.5,12,5);
+    ctx.strokeRect(pose.rLeg.j3.x-6,pose.rLeg.j3.y-2.5,12,5);
+    // Orange accent on boot front
+    ctx.fillStyle='#ff7030';
+    ctx.shadowBlur=4;ctx.shadowColor='#ff7030';
+    ctx.fillRect(pose.lLeg.j3.x+2,pose.lLeg.j3.y-2,3,4);
+    ctx.fillRect(pose.rLeg.j3.x+2,pose.rLeg.j3.y-2,3,4);
+    ctx.shadowBlur=0;
+    ctx.restore();
   }
   // Arms
   drawLimb(pose.lArm);
   drawLimb(pose.rArm);
+  // Mecha arm gauntlets
+  if(p.items.has('ironman')){
+    ctx.save();
+    // Blue arm overlays
+    ctx.strokeStyle='#1e3a8a';ctx.lineWidth=4.5;ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(pose.lArm.j1.x,pose.lArm.j1.y);
+    ctx.lineTo(pose.lArm.j2.x,pose.lArm.j2.y);
+    ctx.lineTo(pose.lArm.j3.x,pose.lArm.j3.y);
+    ctx.moveTo(pose.rArm.j1.x,pose.rArm.j1.y);
+    ctx.lineTo(pose.rArm.j2.x,pose.rArm.j2.y);
+    ctx.lineTo(pose.rArm.j3.x,pose.rArm.j3.y);
+    ctx.stroke();
+    // Silver elbow joints
+    ctx.fillStyle='#c8ccd4';
+    ctx.beginPath();ctx.arc(pose.lArm.j2.x,pose.lArm.j2.y,2.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(pose.rArm.j2.x,pose.rArm.j2.y,2.5,0,Math.PI*2);ctx.fill();
+    // Silver gauntlet (palm with repulsor)
+    ctx.fillStyle='#c8ccd4';
+    ctx.beginPath();ctx.arc(pose.lArm.j3.x,pose.lArm.j3.y,3.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(pose.rArm.j3.x,pose.rArm.j3.y,3.5,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#444';ctx.lineWidth=0.4;
+    ctx.beginPath();ctx.arc(pose.lArm.j3.x,pose.lArm.j3.y,3.5,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.arc(pose.rArm.j3.x,pose.rArm.j3.y,3.5,0,Math.PI*2);ctx.stroke();
+    // Orange repulsor glow on palms
+    ctx.fillStyle='#ff7030';
+    ctx.shadowBlur=4;ctx.shadowColor='#ff7030';
+    ctx.beginPath();ctx.arc(pose.lArm.j3.x,pose.lArm.j3.y,1.4,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(pose.rArm.j3.x,pose.rArm.j3.y,1.4,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.restore();
+  }
 
-  // Sword
+  // Three-sword warrior style (original: triple katana, dark robe, red sash, headband)
   if(p.items.has('sword')){
-    const h=pose.rArm.j3;
-    ctx.strokeStyle='#ddd';ctx.lineWidth=3;
-    ctx.beginPath();
-    ctx.moveTo(h.x,h.y);
-    ctx.lineTo(h.x+22,h.y-3);
-    ctx.stroke();
-    ctx.strokeStyle='#aa6a2a';ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.moveTo(h.x-1,h.y+1);ctx.lineTo(h.x+4,h.y-3);
-    ctx.stroke();
+    const drawKatana=(px,py,angle,len,wrapColor)=>{
+      ctx.save();
+      ctx.translate(px,py);
+      ctx.rotate(angle);
+      // Blade with reflective gradient
+      const bladeGrd=ctx.createLinearGradient(0,-1.6,0,1.6);
+      bladeGrd.addColorStop(0,'#fff');
+      bladeGrd.addColorStop(0.45,'#dde2ea');
+      bladeGrd.addColorStop(0.55,'#a8aeb8');
+      bladeGrd.addColorStop(1,'#6a6e78');
+      ctx.fillStyle=bladeGrd;
+      ctx.fillRect(0,-1.5,len,3);
+      ctx.strokeStyle='#333';ctx.lineWidth=0.4;
+      ctx.strokeRect(0,-1.5,len,3);
+      // Blade highlight stripe
+      ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=0.4;
+      ctx.beginPath();ctx.moveTo(2,-0.7);ctx.lineTo(len-2,-0.7);ctx.stroke();
+      // Tip (kissaki)
+      ctx.fillStyle='#eef';
+      ctx.beginPath();
+      ctx.moveTo(len,-1.5);
+      ctx.lineTo(len+5,0);
+      ctx.lineTo(len,1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle='#333';ctx.stroke();
+      // Tsuba (gold square guard)
+      ctx.fillStyle='#d4a830';
+      ctx.fillRect(-0.6,-3.8,2.2,7.6);
+      ctx.strokeStyle='#5a3a10';ctx.lineWidth=0.4;
+      ctx.strokeRect(-0.6,-3.8,2.2,7.6);
+      ctx.fillStyle='#7a5818';
+      ctx.fillRect(-0.4,-0.4,1.8,0.8);
+      // Handle (tsuka) - dark wrap
+      ctx.fillStyle=wrapColor||'#2a1a3a';
+      ctx.fillRect(-7.5,-1.8,7,3.6);
+      // Diamond cord wrap pattern
+      ctx.strokeStyle='#cdd6e0';ctx.lineWidth=0.3;
+      for(let i=0;i<4;i++){
+        const x=-7.5+i*1.8;
+        ctx.beginPath();
+        ctx.moveTo(x,-1.8);ctx.lineTo(x+0.9,1.8);
+        ctx.moveTo(x+0.9,-1.8);ctx.lineTo(x,1.8);
+        ctx.stroke();
+      }
+      // Pommel (kashira)
+      ctx.fillStyle='#888';
+      ctx.beginPath();ctx.arc(-7.8,0,1.1,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#444';ctx.lineWidth=0.4;
+      ctx.beginPath();ctx.arc(-7.8,0,1.1,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    };
+    // Right hand katana
+    const rh=pose.rArm.j3;
+    drawKatana(rh.x,rh.y,-0.08,22,'#2a1a3a');
+    // Left hand katana
+    const lh=pose.lArm.j3;
+    drawKatana(lh.x,lh.y,0.08,22,'#3a1a2a');
+    // Mouth katana (held horizontally between teeth) - only when not in hit/dead state
+    if(p.state!=='hit'&&p.state!=='dead'){
+      drawKatana(pose.head.x+5,pose.head.y+5,-0.05,24,'#1a1a1a');
+    }
     ctx.strokeStyle=baseColor;ctx.lineWidth=LW;
   }
   // Shield
@@ -2907,9 +3741,154 @@ function drawStickman(p){
     ctx.fillStyle='#d4af37';
     ctx.fillRect(pose.head.x-8,pose.head.y-12,16,1);
   }
-  // Luffy straw hat
+  // Swordsman: dark hair + black headband with gold knot
+  if(p.items.has('sword')){
+    ctx.save();
+    // Dark teal-ish hair tuft on top
+    ctx.fillStyle='#1f2a26';
+    ctx.beginPath();
+    ctx.arc(pose.head.x-3,pose.head.y-7,3,0,Math.PI*2);
+    ctx.arc(pose.head.x+1,pose.head.y-9,3.5,0,Math.PI*2);
+    ctx.arc(pose.head.x+5,pose.head.y-7,3,0,Math.PI*2);
+    ctx.fill();
+    // Black headband strip
+    ctx.fillStyle='#0a0a0a';
+    ctx.beginPath();
+    ctx.moveTo(pose.head.x-10,pose.head.y-5);
+    ctx.lineTo(pose.head.x+10,pose.head.y-5);
+    ctx.lineTo(pose.head.x+10,pose.head.y-2);
+    ctx.lineTo(pose.head.x-10,pose.head.y-2);
+    ctx.closePath();
+    ctx.fill();
+    // Gold accent stripe on headband
+    ctx.fillStyle='#d4a830';
+    ctx.fillRect(pose.head.x-3,pose.head.y-4,6,1.4);
+    // Knot on the side
+    ctx.fillStyle='#0a0a0a';
+    ctx.beginPath();
+    ctx.arc(pose.head.x-11,pose.head.y-3,2.5,0,Math.PI*2);
+    ctx.fill();
+    // Headband tail dangling
+    ctx.beginPath();
+    ctx.moveTo(pose.head.x-12,pose.head.y-1);
+    ctx.lineTo(pose.head.x-16,pose.head.y+5);
+    ctx.lineTo(pose.head.x-13,pose.head.y+6);
+    ctx.lineTo(pose.head.x-11,pose.head.y+1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  // Pirate straw hat - draw dark hair tuft underneath the hat
   if(p.items.has('straw')){
+    ctx.save();
+    // Dark hair peeking out from under the hat at the bottom
+    ctx.fillStyle='#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(pose.head.x-6,pose.head.y+1,2.5,0,Math.PI*2);
+    ctx.arc(pose.head.x-2,pose.head.y+2,2.5,0,Math.PI*2);
+    ctx.arc(pose.head.x+3,pose.head.y+1,2.5,0,Math.PI*2);
+    ctx.arc(pose.head.x+7,pose.head.y+1,2.5,0,Math.PI*2);
+    ctx.fill();
+    // Small scar mark below left eye (signature pirate look)
+    ctx.fillStyle='#7a3030';
+    ctx.fillRect(pose.head.x-4,pose.head.y+1,0.7,2.5);
+    ctx.restore();
+    // Now draw the hat ON TOP of the hair
     drawStrawHat(pose.head.x,pose.head.y-9,9);
+  }
+  // Original mecha helmet (angular octagonal, orange visor, antenna)
+  if(p.items.has('ironman')){
+    const hx=pose.head.x, hy=pose.head.y;
+    ctx.save();
+    // Octagonal blue dome
+    const helmGrd=ctx.createLinearGradient(hx,hy-12,hx,hy+10);
+    helmGrd.addColorStop(0,'#3358d4');
+    helmGrd.addColorStop(0.5,'#1e3a8a');
+    helmGrd.addColorStop(1,'#0f2070');
+    ctx.fillStyle=helmGrd;
+    ctx.strokeStyle='#06104a';ctx.lineWidth=1.2;
+    ctx.beginPath();
+    ctx.moveTo(hx-5,hy-12);
+    ctx.lineTo(hx+5,hy-12);
+    ctx.lineTo(hx+10,hy-7);
+    ctx.lineTo(hx+12,hy-1);
+    ctx.lineTo(hx+11,hy+5);
+    ctx.lineTo(hx+7,hy+9);
+    ctx.lineTo(hx-7,hy+9);
+    ctx.lineTo(hx-11,hy+5);
+    ctx.lineTo(hx-12,hy-1);
+    ctx.lineTo(hx-10,hy-7);
+    ctx.closePath();
+    ctx.fill();ctx.stroke();
+    // Silver lower jaw plate
+    const jawGrd=ctx.createLinearGradient(hx,hy+1,hx,hy+9);
+    jawGrd.addColorStop(0,'#dde0e6');
+    jawGrd.addColorStop(1,'#888c98');
+    ctx.fillStyle=jawGrd;
+    ctx.strokeStyle='#444';ctx.lineWidth=0.6;
+    ctx.beginPath();
+    ctx.moveTo(hx-9,hy+1);
+    ctx.lineTo(hx+9,hy+1);
+    ctx.lineTo(hx+7,hy+9);
+    ctx.lineTo(hx-7,hy+9);
+    ctx.closePath();
+    ctx.fill();ctx.stroke();
+    // Mouth grill (5 vertical lines)
+    ctx.strokeStyle='#222';ctx.lineWidth=0.6;
+    for(let i=-2;i<=2;i++){
+      ctx.beginPath();
+      ctx.moveTo(hx+i*1.6,hy+3);
+      ctx.lineTo(hx+i*1.6,hy+7);
+      ctx.stroke();
+    }
+    // Orange visor strip (across eyes)
+    const visorGrd=ctx.createLinearGradient(hx,hy-4,hx,hy+1);
+    visorGrd.addColorStop(0,'#ffb060');
+    visorGrd.addColorStop(0.5,'#ff7030');
+    visorGrd.addColorStop(1,'#cc4818');
+    ctx.fillStyle=visorGrd;
+    ctx.shadowBlur=6;ctx.shadowColor='#ff7030';
+    ctx.beginPath();
+    ctx.moveTo(hx-9,hy-3);
+    ctx.lineTo(hx+9,hy-3);
+    ctx.lineTo(hx+8,hy);
+    ctx.lineTo(hx-8,hy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur=0;
+    // Visor inner glow line
+    ctx.fillStyle='#fff5b8';
+    ctx.fillRect(hx-7,hy-2.2,14,0.8);
+    // Silver top crest
+    ctx.fillStyle='#c8ccd4';
+    ctx.beginPath();
+    ctx.moveTo(hx-3,hy-12);
+    ctx.lineTo(hx+3,hy-12);
+    ctx.lineTo(hx+1.5,hy-15);
+    ctx.lineTo(hx-1.5,hy-15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle='#666';ctx.lineWidth=0.4;ctx.stroke();
+    // Side antennae (both sides)
+    ctx.strokeStyle='#888';ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(hx+11,hy-6);ctx.lineTo(hx+15,hy-10);
+    ctx.moveTo(hx-11,hy-6);ctx.lineTo(hx-15,hy-10);
+    ctx.stroke();
+    ctx.fillStyle='#ff7030';
+    ctx.shadowBlur=4;ctx.shadowColor='#ff7030';
+    ctx.beginPath();ctx.arc(hx+15,hy-10,1.3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(hx-15,hy-10,1.3,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+    // Cheek guards (silver triangles)
+    ctx.fillStyle='#c8ccd4';
+    ctx.beginPath();
+    ctx.moveTo(hx-12,hy-1);ctx.lineTo(hx-9,hy+1);ctx.lineTo(hx-11,hy+5);
+    ctx.closePath();ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(hx+12,hy-1);ctx.lineTo(hx+9,hy+1);ctx.lineTo(hx+11,hy+5);
+    ctx.closePath();ctx.fill();
+    ctx.restore();
   }
   // Face: eyes that look at opponent + expression based on state
   const oppLook=opp ? (opp.x>p.x?1:-1)*p.facing : 1; // +1 looking forward, -1 looking back
@@ -3348,6 +4327,31 @@ function getPose(p,t){
     pose.lArm.j3={x:6+reach,y:-44};
     pose.head.x=2;
     pose.spine.top.x=1;
+  } else if(p.state==='ironmanmissile'){
+    // Right hand thrust forward (palm facing target)
+    const tt=p.stateTime;
+    const k=tt<0.20?(tt/0.20):Math.max(0,1-(tt-0.20)/0.30);
+    pose.rArm.j2={x:6,y:-44};
+    pose.rArm.j3={x:18+k*4,y:-40};
+    pose.lArm.j2={x:-3,y:-43};
+    pose.lArm.j3={x:-7,y:-32};
+    pose.head.x=2;
+  } else if(p.state==='ironmanhoming'){
+    // Both arms slightly down at sides, leaning back to fire from back jets
+    pose.rArm.j2={x:5,y:-43};
+    pose.rArm.j3={x:6,y:-30};
+    pose.lArm.j2={x:-5,y:-43};
+    pose.lArm.j3={x:-6,y:-30};
+    pose.head.x=-1;
+    pose.spine.top.x=-2;
+  } else if(p.state==='ironmanlaser'){
+    // Hand raised up signaling buddy
+    const tt=p.stateTime;
+    const raise=Math.min(1,tt/0.25);
+    pose.rArm.j2={x:5,y:-50-raise*8};
+    pose.rArm.j3={x:8,y:-60-raise*12};
+    pose.lArm.j3={x:-7,y:-32};
+    pose.head.x=1;pose.head.y=-56;
   } else if(p.state==='dokebi'){
     const tt=p.stateTime;
     if(tt<DOKEBI_CHARGE){
@@ -3436,7 +4440,98 @@ function getPose(p,t){
   });
   return pose;
 }
+function drawMissileProjectile(pr){
+  ctx.save();
+  ctx.translate(pr.x,pr.y);
+  const dir=pr.vx>=0?1:-1;
+  ctx.scale(dir,1);
+  // Outer halo
+  const halo=ctx.createRadialGradient(0,0,2,0,0,30);
+  halo.addColorStop(0,'rgba(255,170,80,0.55)');
+  halo.addColorStop(1,'rgba(255,80,40,0)');
+  ctx.fillStyle=halo;
+  ctx.beginPath();ctx.arc(-6,0,30,0,Math.PI*2);ctx.fill();
+  // Missile body (gray cylinder)
+  ctx.fillStyle='#888';
+  ctx.strokeStyle='#333';ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(-14,-5);
+  ctx.lineTo(8,-5);
+  ctx.lineTo(15,0);
+  ctx.lineTo(8,5);
+  ctx.lineTo(-14,5);
+  ctx.closePath();
+  ctx.fill();ctx.stroke();
+  // Red warhead band
+  ctx.fillStyle='#cc2828';
+  ctx.fillRect(2,-5,5,10);
+  // Yellow band
+  ctx.fillStyle='#e8c038';
+  ctx.fillRect(-2,-5,2,10);
+  // Tail fins
+  ctx.fillStyle='#666';
+  ctx.beginPath();ctx.moveTo(-14,-5);ctx.lineTo(-18,-9);ctx.lineTo(-12,-2);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(-14,5);ctx.lineTo(-18,9);ctx.lineTo(-12,2);ctx.closePath();ctx.fill();
+  // Highlight stripe
+  ctx.fillStyle='rgba(255,255,255,0.4)';
+  ctx.fillRect(-12,-3,18,1.5);
+  // Flame trail (multiple layers)
+  for(let i=1;i<=5;i++){
+    const t=i/5;
+    const flameSize=10-i*1.6;
+    ctx.fillStyle=`hsla(${30-i*6},100%,${72-i*8}%,${1-t})`;
+    ctx.beginPath();ctx.arc(-14-i*5,(Math.random()-0.5)*1.5,flameSize,0,Math.PI*2);ctx.fill();
+  }
+  // White hot core flame
+  ctx.fillStyle='rgba(255,255,255,0.95)';
+  ctx.beginPath();ctx.arc(-16,0,3.5,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+function drawHomingProjectile(pr){
+  ctx.save();
+  ctx.translate(pr.x,pr.y);
+  // Direction by velocity
+  const ang=Math.atan2(pr.vy||0,pr.vx);
+  ctx.rotate(ang);
+  // Outer halo
+  const halo=ctx.createRadialGradient(0,0,2,0,0,22);
+  halo.addColorStop(0,'rgba(200,140,255,0.55)');
+  halo.addColorStop(1,'rgba(140,80,220,0)');
+  ctx.fillStyle=halo;
+  ctx.beginPath();ctx.arc(-3,0,22,0,Math.PI*2);ctx.fill();
+  // Smaller missile (purple/violet)
+  ctx.fillStyle='#bb88ee';
+  ctx.strokeStyle='#5a2a8a';ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(-9,-3.5);
+  ctx.lineTo(5,-3.5);
+  ctx.lineTo(10,0);
+  ctx.lineTo(5,3.5);
+  ctx.lineTo(-9,3.5);
+  ctx.closePath();
+  ctx.fill();ctx.stroke();
+  // Tip
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(7,0,2,0,Math.PI*2);ctx.fill();
+  // Tail fins
+  ctx.fillStyle='#8a55c0';
+  ctx.beginPath();ctx.moveTo(-9,-3.5);ctx.lineTo(-12,-6);ctx.lineTo(-9,-1);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(-9,3.5);ctx.lineTo(-12,6);ctx.lineTo(-9,1);ctx.closePath();ctx.fill();
+  // Flame trail
+  for(let i=1;i<=4;i++){
+    const t=i/4;
+    const flameSize=6-i*1;
+    ctx.fillStyle=`hsla(${280+i*5},100%,${75-i*10}%,${1-t})`;
+    ctx.beginPath();ctx.arc(-9-i*3,(Math.random()-0.5)*1,flameSize,0,Math.PI*2);ctx.fill();
+  }
+  // Hot core
+  ctx.fillStyle='rgba(255,255,255,0.95)';
+  ctx.beginPath();ctx.arc(-10,0,2,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
 function drawProjectile(pr){
+  if(pr.kind==='missile')return drawMissileProjectile(pr);
+  if(pr.kind==='homing')return drawHomingProjectile(pr);
   const r=pr.r+Math.sin(pr.pulse)*2;
   // Outer glow halo (very large)
   const halo=ctx.createRadialGradient(pr.x,pr.y,r*0.2,pr.x,pr.y,r*3);
@@ -3598,6 +4693,8 @@ function render(){
   for(const pr of projectiles)drawProjectile(pr);
   drawStickman(opp);
   drawStickman(me);
+  // Friend mecha buddy + laser beam render on top
+  for(const b of ironmanBuddies)drawIronmanBuddy(b);
   // Screen flash overlay
   if(screenFlash>0){
     ctx.fillStyle=`rgba(${flashColor},${screenFlash})`;
@@ -3633,6 +4730,9 @@ function tickSkillBanners(dt){
         else if(cur==='gomubazooka'){p.skillBanner={text:'고무고무 바주카!!',color:'#ff8030',time:0};sfxGomuBazooka();}
         else if(cur==='gomushield'){p.skillBanner={text:'고무고무 방패!! (투사체 반사)',color:'#ffd060',time:0};sfxGomuShield();}
         else if(cur==='dokebi'){p.skillBanner={text:'도깨비 참수!!',color:'#aa44ff',time:0};sfxDokebiCharge();}
+        else if(cur==='ironmanmissile'){p.skillBanner={text:'🚀 미사일!!',color:'#ff7030',time:0};sfxIronmanMissile();}
+        else if(cur==='ironmanhoming'){p.skillBanner={text:'🎯 호밍 미사일!! ×2',color:'#aa44ff',time:0};sfxIronmanHoming();}
+        else if(cur==='ironmanlaser'){p.skillBanner={text:'🤖 친구 아이언맨!! 레이저 폭격',color:'#5a90ff',time:0};sfxIronmanLaserCharge();}
         p._lastBannerState=cur;
       }
     }
@@ -3695,6 +4795,7 @@ function loop(){
     }
     updateMe(dt);
     updateProjectiles();
+    updateIronmanBuddies(dt);
     updateParticles();
     updateHUD();
     tickSkillBanners(dt);
@@ -3724,6 +4825,7 @@ function loop(){
     // Continue broadcasting so opp's character moves correctly on their side
     broadcastState();
     updateProjectiles();
+    updateIronmanBuddies(dt);
     updateParticles();
     updateHUD();
     tickSkillBanners(dt);
