@@ -809,7 +809,7 @@ function newPlayer(idx){
     x:idx===0?280:620,y:GROUND_Y,
     vx:0,vy:0,
     facing:idx===0?1:-1,
-    hp:100,maxhp:100,
+    hp:200,maxhp:200,
     state:'idle',stateTime:0,
     onGround:true,jumps:0,
     items:new Set(),
@@ -831,13 +831,13 @@ function newPlayer(idx){
 }
 function applyItemEffects(p){
   // Apply jacket immediately (HP bonus)
-  if(p.items.has('jacket')&&p.maxhp===100){
-    p.maxhp=Math.floor(100*1.33);
+  if(p.items.has('jacket')&&p.maxhp===200){
+    p.maxhp=Math.floor(200*1.33);
     p.hp=p.maxhp;
   }
 }
 function getSpeed(p){return SPEED_BASE+(p.items.has('boots')?2:0);}
-function getMaxJumps(p){return p.items.has('boots')?2:1;}
+function getMaxJumps(p){return p.items.has('boots')?3:2;} // 기본 2단점프, 부츠 3단점프
 function getDefense(p){return 0;} // hat no longer defense; now damage boost
 function getReach(p,base,kind){
   if(!p.items.has('sword'))return base;
@@ -1123,6 +1123,31 @@ function updateMe(dt){
   me.y+=me.vy;
   if(me.x<30)me.x=30;
   if(me.x>W-30)me.x=W-30;
+  // ===== Body collision (서로 뚫지 못함) =====
+  // Both clients run this locally; symmetry naturally separates the two players.
+  // Skip when either is dead or in teleport state (dokebi passes through).
+  if(opp && me.state!=='dead' && opp.state!=='dead' &&
+     me.state!=='dokebi' && opp.state!=='dokebi'){
+    const yDiff=Math.abs(me.y-opp.y);
+    // Only collide when at similar height (allow jumping over)
+    if(yDiff<46){
+      const dx=me.x-opp.x;
+      const minDist=24; // 양쪽 body half-width 합 + 여유
+      if(dx===0){
+        // Exact overlap - push behind facing direction
+        me.x=opp.x-me.facing*minDist;
+        me.vx=0;
+      } else if(Math.abs(dx)<minDist){
+        // Push away from opponent
+        me.x=opp.x+Math.sign(dx)*minDist;
+        // Kill horizontal momentum so player can't keep ramming
+        if(Math.sign(me.vx)===-Math.sign(dx))me.vx=0;
+      }
+    }
+    // Re-clamp boundary in case collision pushed us out
+    if(me.x<30)me.x=30;
+    if(me.x>W-30)me.x=W-30;
+  }
   if(me.y>=GROUND_Y){
     me.y=GROUND_Y;
     if(!me.onGround){
@@ -1190,17 +1215,16 @@ function updateMe(dt){
   if(me.state==='shoryuken'&&me.stateTime<0.05){
     me.vy=-16;me.vx=me.facing*7;me.onGround=false;
   }
-  // Hurricane kick: spin + travel forward instantly (no in-place phase).
-  // Crosses ~1/3 of map (W=900, 1/3=300px) over 0.55s at 2x previous speed.
+  // Hurricane kick: spin + travel forward (short range — ~1/9 of map ≈ 100px).
   if(me.state==='spinkick'){
     if(me.stateTime<0.04){
       // Quick takeoff burst
-      me.vx=me.facing*10;
+      me.vx=me.facing*3.3;
       me.vy=-3.2;
       me.onGround=false;
     } else if(me.stateTime<0.45){
-      // Cruise: full forward speed, slight float
-      me.vx=me.facing*10;
+      // Cruise: short-range forward, slight float
+      me.vx=me.facing*3.3;
       if(me.y<GROUND_Y-30){me.vy=Math.min(me.vy+0.3,1.5);}
     } else {
       // Recovery: slow down
@@ -1346,7 +1370,7 @@ function startSpinKick(){
   // at 2x the previous speed. 8 multi-hits during the rush.
   me.state='spinkick';me.stateTime=0;
   me.iframe=0.18;
-  me.vx=me.facing*10;me.vy=-3.2;me.onGround=false;
+  me.vx=me.facing*3.3;me.vy=-3.2;me.onGround=false;
   flash('100,180,255',0.35);
   shake(5);
   sfxSpinKick();
@@ -1376,7 +1400,7 @@ function startSpinKick(){
         const hbY=me.y-60;
         const body=getBodyBox(opp);
         if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
-          sendMsg({type:'hit',dmg:4,kbDir:f,kind:'spinkick',bypass:true});
+          sendMsg({type:'hit',dmg:2,kbDir:f,kind:'spinkick',bypass:true});
           for(let k=0;k<4;k++){
             spawnP({x:opp.x,y:opp.y-30,
               vx:-f*(2+Math.random()*2),vy:-Math.random()*2,
@@ -2858,7 +2882,7 @@ function grantRandomItem(){
   const ownedHero=HERO_ITEMS.find(i=>me.items.has(i));
   if(ownedHero)available=available.filter(i=>!(HERO_ITEMS.includes(i)&&i!==ownedHero));
   if(available.length===0){
-    me.hp=Math.min(me.maxhp,me.hp+30);
+    me.hp=Math.min(me.maxhp,me.hp+60);
     toast('모든 아이템 보유! HP +30');
     sfxItem();
     updateHUD();
