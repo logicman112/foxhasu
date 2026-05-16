@@ -267,8 +267,8 @@ const IRONMAN_LASER_COOLDOWN=20;
 const HADO_SPEED=6.5;
 // Hitbox dimensions (pixels). Reach = extend in front from attacker center
 const PUNCH_REACH=40;
-const KICK_REACH=55;
-const SHORYU_REACH=50;
+const KICK_REACH=80; // 기본 발차기 사정거리 = 펀치의 2배
+const SHORYU_REACH=85;
 const SWORD_BONUS=22;
 const BODY_HALF_W=10;
 const BODY_HEIGHT=72;
@@ -782,6 +782,13 @@ function handleMsg(d){
       scores=d.scores;
       handleRoundEnd(d.winner);
     }
+  } else if(d.type==='startRound'){
+    // Host triggers a new round; guest syncs roundNum/scores and starts immediately
+    if(!isHost){
+      if(typeof d.roundNum==='number')roundNum=d.roundNum;
+      if(Array.isArray(d.scores))scores=d.scores;
+      startRound();
+    }
   } else if(d.type==='resetReq'){
     if(confirm('상대방이 재대결을 요청했습니다. 수락?')){
       sendMsg({type:'resetAck',accept:true});
@@ -928,7 +935,10 @@ function updateMe(dt){
   if(me.dokebiCooldown>0)me.dokebiCooldown=Math.max(0,me.dokebiCooldown-dt);
   // Decay dokebi cooldown
   if(me.ironmanLaserCooldown>0)me.ironmanLaserCooldown=Math.max(0,me.ironmanLaserCooldown-dt);
-  if(me.onGround && !['punch','kick','hadouken','shoryuken','hit','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state) && opp){
+  // Auto-face opp every frame (works during jump + most actions).
+  // Lock facing only during states where mid-action flip would break the move:
+  // hit/dead (reeling), dokebi (locked teleport vector), samchun (locked slash arc).
+  if(opp && !['hit','dead','dokebi','samchun'].includes(me.state)){
     me.facing=opp.x>me.x?1:-1;
   }
   // Block: shield+L OR holding back direction (back-walk = guard, like classic 2D fighters)
@@ -1060,6 +1070,11 @@ function updateMe(dt){
   else if(me.onGround) me.flyTime=0;
   // Attacks (block during special states)
   if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state)){
+    // Force-update facing the instant an attack is initiated so jump-kick / dash-punch
+    // never whiffs in the wrong direction even when opp crossed over mid-air.
+    if((pressed(KB.punch)||pressed(KB.kick))&&opp){
+      me.facing=opp.x>me.x?1:-1;
+    }
     if(pressed(KB.punch)){
       const sp=checkSpecial();
       if(sp==='shoryuken'){
@@ -1156,14 +1171,14 @@ function updateMe(dt){
   if(me.iframe>0)me.iframe-=dt;
   if(me.hitFlash>0)me.hitFlash-=dt;
   // Auto-end states (min 0.5s recovery on punch/kick = no spam)
-  const swordPunchDur=me.items.has('sword')?0.62:0.50;
-  const swordKickDur=me.items.has('sword')?0.70:0.55;
+  const swordPunchDur=me.items.has('sword')?0.42:0.30; // 기본 펀치 텀 0.30s
+  const swordKickDur=me.items.has('sword')?0.72:0.60;  // 기본 발차기 텀 0.60s
   if(me.state==='punch'&&me.stateTime>swordPunchDur)me.state='idle';
   else if(me.state==='kick'&&me.stateTime>swordKickDur)me.state='idle';
   else if(me.state==='hadouken'&&me.stateTime>0.5)me.state='idle';
-  else if(me.state==='shoryuken'&&me.stateTime>0.4)me.state='idle';
+  else if(me.state==='shoryuken'&&me.stateTime>0.35)me.state='idle';
   else if(me.state==='samchun'&&me.stateTime>1.3)me.state='idle';
-  else if(me.state==='spinkick'&&me.stateTime>0.85)me.state='idle';
+  else if(me.state==='spinkick'&&me.stateTime>0.55)me.state='idle';
   else if(me.state==='gomupistol'&&me.stateTime>0.7)me.state='idle';
   else if(me.state==='gomubazooka'&&me.stateTime>0.7)me.state='idle';
   else if(me.state==='gomushield'&&me.stateTime>GOMU_SHIELD_DUR)me.state='idle';
@@ -1173,25 +1188,39 @@ function updateMe(dt){
   else if(me.state==='ironmanlaser'&&me.stateTime>0.80)me.state='idle';
   else if(me.state==='hit'&&me.stateTime>(me.hitDuration||0.3))me.state='idle';
   if(me.state==='shoryuken'&&me.stateTime<0.05){
-    me.vy=-11;me.vx=me.facing*3.5;me.onGround=false;
+    me.vy=-16;me.vx=me.facing*7;me.onGround=false;
   }
-  // Spin kick phases: 0-0.3s spin in place, 0.3-1.2s advance forward
+  // Hurricane kick: spin + travel forward instantly (no in-place phase).
+  // Crosses ~1/3 of map (W=900, 1/3=300px) over 0.55s at 2x previous speed.
   if(me.state==='spinkick'){
-    if(me.stateTime<0.3){
-      me.vx=0;
-      // Hover briefly during charge
-      if(me.y<GROUND_Y){me.vy=Math.min(me.vy+0.2,1);}
-    } else if(me.stateTime<1.15){
-      me.vx=me.facing*4.5;
+    if(me.stateTime<0.04){
+      // Quick takeoff burst
+      me.vx=me.facing*10;
+      me.vy=-3.2;
+      me.onGround=false;
+    } else if(me.stateTime<0.45){
+      // Cruise: full forward speed, slight float
+      me.vx=me.facing*10;
+      if(me.y<GROUND_Y-30){me.vy=Math.min(me.vy+0.3,1.5);}
     } else {
-      me.vx*=0.6;
+      // Recovery: slow down
+      me.vx*=0.7;
     }
-    // Continuous blue flame trail
-    if(Math.random()<0.7){
-      spawnP({x:me.x+(Math.random()-0.5)*16,y:me.y-15-Math.random()*40,
-        vx:(Math.random()-0.5)*1.5,vy:(Math.random()-0.5)*1.5-0.3,
-        life:14,maxLife:14,type:'energy',
+    // Continuous blue flame trail (denser since faster)
+    if(Math.random()<0.85){
+      spawnP({x:me.x+(Math.random()-0.5)*18,y:me.y-15-Math.random()*40,
+        vx:-me.facing*(1+Math.random()*2),vy:(Math.random()-0.5)*1.5-0.3,
+        life:16,maxLife:16,type:'energy',
         color:'rgba(70,130,255,0.95)',size:3+Math.random()*2,gravity:-0.02});
+    }
+    // Afterimage trail (every other frame)
+    if(Math.floor(me.stateTime*60)%2===0&&me.stateTime>0.05&&me.stateTime<0.5){
+      afterimages.push({
+        x:me.x,y:me.y,facing:me.facing,
+        pose:getPose(me,performance.now()/1000),
+        life:10,maxLife:10,
+        color:'rgba(80,140,255,0.7)'
+      });
     }
   }
   // Shoryuken flame trail (no afterimages)
@@ -1312,41 +1341,39 @@ function sfxSpinKick(){
   noise(0.06,0.04,3000);
 }
 function startSpinKick(){
-  // 앞→↓→뒤 + S = 회전 발차기
-  // Phase 1 (0-0.3s): spin in place
-  // Phase 2 (0.3-1.2s): advance forward fast while spinning + multiple hits
-  // Blue flame effect throughout
+  // 앞→↓→뒤 + S = 회전 돌진 차기 (회오리)
+  // No in-place charge — instantly rotates and rushes forward across ~1/3 of map
+  // at 2x the previous speed. 8 multi-hits during the rush.
   me.state='spinkick';me.stateTime=0;
-  me.iframe=0.15;
-  me.vx=0;me.vy=-1; // tiny hop in place
-  flash('100,180,255',0.3);
-  shake(4);
+  me.iframe=0.18;
+  me.vx=me.facing*10;me.vy=-3.2;me.onGround=false;
+  flash('100,180,255',0.35);
+  shake(5);
   sfxSpinKick();
-  // 8 hits during advance phase (0.3-1.15s)
-  const reach=KICK_REACH+10;
+  // 8 multi-hits compressed to fit the 0.45s travel window (60ms intervals)
+  const reach=KICK_REACH+12;
   for(let i=0;i<8;i++){
     setTimeout(()=>{
       if(roundOver||matchOver||!me||me.state!=='spinkick')return;
       sfxSpinKick();
-      // Blue flame burst around player
-      for(let j=0;j<5;j++){
+      // Blue flame burst
+      for(let j=0;j<4;j++){
         const ang=Math.random()*Math.PI*2;
         spawnP({x:me.x+(Math.random()-0.5)*22,y:me.y-25+Math.random()*30,
-          vx:Math.cos(ang)*(1.5+Math.random()*1.5),vy:Math.sin(ang)*1.2-0.5,
-          life:18,maxLife:18,type:'energy',
+          vx:Math.cos(ang)*(1.8+Math.random()*1.8),vy:Math.sin(ang)*1.2-0.5,
+          life:14,maxLife:14,type:'energy',
           color:'rgba(80,140,255,1)',size:4+Math.random()*2,gravity:-0.02});
       }
-      // Bright blue core
+      // Bright blue core ring
       spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
-        life:10,maxLife:10,type:'shockwave',
-        color:'rgba(120,180,255,0.85)',size:5,maxR:32,gravity:0});
+        life:9,maxLife:9,type:'shockwave',
+        color:'rgba(120,180,255,0.9)',size:5,maxR:36,gravity:0});
       shake(3);
-      // Hit check toward opponent
       if(opp&&opp.state!=='dead'){
         const f=opp.x>me.x?1:-1;
-        const hbW=reach,hbH=50;
+        const hbW=reach,hbH=60;
         const hbX=me.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
-        const hbY=me.y-50;
+        const hbY=me.y-60;
         const body=getBodyBox(opp);
         if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
           sendMsg({type:'hit',dmg:4,kbDir:f,kind:'spinkick',bypass:true});
@@ -1357,9 +1384,9 @@ function startSpinKick(){
           }
         }
       }
-    },300+i*110);
+    },50+i*60);
   }
-  setTimeout(()=>{if(me&&me.state==='spinkick'){me.state='idle';me.vx=0;}},1300);
+  setTimeout(()=>{if(me&&me.state==='spinkick'){me.state='idle';me.vx=0;}},600);
   me.inputHistory=[];
   sendMsg({type:'attack',kind:'spinkick'});
 }
@@ -2248,7 +2275,7 @@ function applyDamageToMe(dmg,kbDir,source,bypassIframe){
     me.vx+=kbDir*(isSpecial?4.0:isKick?2.2:2.8);
     me.vy=isKick?-2:-3.5;
     me.state='hit';me.stateTime=0;
-    me.hitDuration=isKick?0.12:0.32;
+    me.hitDuration=0.10; // 모든 타격은 피격자 0.1초 경직 (콤보 가능, 빠른 회복)
     me.hitFlash=0.35;
     if(source==='shoryuken')me.vy=-5.5;
     shake(isSpecial?12:isKick?5:7);
@@ -2715,7 +2742,20 @@ function nextRound(winner){
     setTimeout(endMatch,400);
   } else {
     roundNum++;
-    startRound();
+    if(isHost){
+      // Host is the single source of truth: notify guest BEFORE starting locally
+      sendMsg({type:'startRound',roundNum,scores:scores.slice()});
+      startRound();
+    } else {
+      // Guest waits for host's 'startRound' signal. Safety fallback: if no message
+      // arrives within 1.5s (lost packet etc.), start locally so the match doesn't stall.
+      setTimeout(()=>{
+        if(roundOver&&!gameRunning&&!matchOver){
+          console.warn('[stickfight] startRound fallback fired (host signal lost)');
+          startRound();
+        }
+      },1500);
+    }
   }
 }
 function endMatch(){
@@ -3140,7 +3180,7 @@ function drawStickman(p){
   // Spin kick rotation (whole body spins around)
   if(p.state==='spinkick'){
     ctx.translate(0,-30);
-    ctx.rotate(p.stateTime*Math.PI*4); // ~2 rotations per second
+    ctx.rotate(p.stateTime*Math.PI*8); // ~4 rotations per second (doubled)
     ctx.translate(0,30);
   }
   ctx.scale(p.facing,1);
