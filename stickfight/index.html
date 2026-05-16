@@ -233,7 +233,7 @@ const GAME_PREFIX='seoro-stickfight-v2';
 const W=900,H=380;
 const GROUND_Y=330;
 const GRAVITY=0.55;
-const JUMP_VEL=15; // 점프 높이 1.5배 (10→15)
+const JUMP_VEL=10.5; // 점프 높이 30% 다운 (15→10.5)
 const SPEED_BASE=3.8;
 const RUN_MULT=1.5;
 const DASH_VX=6.5;
@@ -785,11 +785,12 @@ function handleMsg(d){
       handleRoundEnd(d.winner);
     }
   } else if(d.type==='startRound'){
-    // Host triggers a new round; guest syncs roundNum/scores and starts immediately
+    // Host triggers new round; sync roundNum/scores. Idempotent — skip if guest
+    // already started locally via their own nextRound timer.
     if(!isHost){
       if(typeof d.roundNum==='number')roundNum=d.roundNum;
       if(Array.isArray(d.scores))scores=d.scores;
-      startRound();
+      if(roundOver) startRound(); // only run if still in round-over (haven't started)
     }
   } else if(d.type==='resetReq'){
     if(confirm('상대방이 재대결을 요청했습니다. 수락?')){
@@ -941,8 +942,9 @@ function updateMe(dt){
   if(me.spinkickCooldown>0)me.spinkickCooldown=Math.max(0,me.spinkickCooldown-dt);
   // Auto-face opp every frame (works during jump + most actions).
   // Lock facing only during states where mid-action flip would break the move:
-  // hit/dead (reeling), dokebi (locked teleport vector), samchun (locked slash arc).
-  if(opp && !['hit','dead','dokebi','samchun'].includes(me.state)){
+  // hit/dead (reeling), dokebi (locked teleport vector), samchun (locked slash arc),
+  // spinkick (locked forward-rush vector - opp jumping over must NOT flip our direction).
+  if(opp && !['hit','dead','dokebi','samchun','spinkick'].includes(me.state)){
     me.facing=opp.x>me.x?1:-1;
   }
   // Block: shield+L OR holding back direction (back-walk = guard, like classic 2D fighters)
@@ -1454,6 +1456,7 @@ function startGomuPistol(){
       const body=getBodyBox(opp);
       if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
         sendMsg({type:'hit',dmg:GOMU_PISTOL_DMG,kbDir:f,kind:'gomupistol'});
+        spawnHitVisuals(opp.x,opp.y,f,'gomupistol');
         // Big impact at opponent
         for(let k=0;k<14;k++){
           const ang=Math.random()*Math.PI*2;
@@ -1539,6 +1542,7 @@ function startGomuBazooka(){
       const body=getBodyBox(opp);
       if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
         sendMsg({type:'hit',dmg:GOMU_BAZOOKA_DMG,kbDir:f,kind:'gomubazooka'});
+        spawnHitVisuals(opp.x,opp.y,f,'gomubazooka');
         // Massive impact
         for(let k=0;k<25;k++){
           const ang=Math.random()*Math.PI*2;
@@ -1746,6 +1750,7 @@ function updateDokebi(dt){
       const oppDodgedCrouch=opp.crouching;
       if(oppInPath&&!oppDodgedJump&&!oppDodgedCrouch){
         sendMsg({type:'hit',dmg:DOKEBI_DMG,kbDir:me.facing,kind:'dokebi'});
+        spawnHitVisuals(opp.x,opp.y,me.facing,'dokebi');
         // Massive impact at opp
         for(let k=0;k<30;k++){
           const ang=Math.random()*Math.PI*2;
@@ -1928,6 +1933,7 @@ function updateIronmanBuddies(dt){
           const inRange=Math.abs(opp.x-b.x)<55;
           if(inRange){
             sendMsg({type:'hit',dmg:IRONMAN_LASER_DMG,kbDir:opp.x>b.x?1:-1,kind:'ironmanlaser'});
+            spawnHitVisuals(opp.x,opp.y,opp.x>b.x?1:-1,'ironmanlaser');
             // Big impact
             for(let k=0;k<28;k++){
               const ang=Math.random()*Math.PI*2;
@@ -2269,15 +2275,88 @@ function scheduleHitCheck(kind,delay){
     else if(kind==='kick'){dmg=getDmg(me,KICK_DMG);knockback=3;}
     else {dmg=SHORYU_DMG;knockback=4;}
     sendMsg({type:'hit',dmg,kbDir:me.facing,kind});
-    // Local hit feedback particles at impact point
-    const impactX=me.facing>0?Math.max(me.x+BODY_HALF_W,Math.min(opp.x-BODY_HALF_W,hb.x+hb.w-4)):
-                              Math.min(me.x-BODY_HALF_W,Math.max(opp.x+BODY_HALF_W,hb.x+4));
-    for(let i=0;i<6;i++){
-      spawnP({x:impactX,y:opp.y-30,vx:-me.facing*(1+Math.random()*3),vy:-1-Math.random()*2,
-        life:18,maxLife:18,type:'spark',color:'#ffeb3b',size:3,gravity:0.2});
-    }
+    // Mirror full hit visuals locally so attacker sees same impact as target
+    spawnHitVisuals(opp.x,opp.y,me.facing,kind);
   },delay*1000);
 }
+// Shared hit-impact visuals - same particles fire on BOTH attacker and target
+// screens. tx/ty = target's world position. kbDir = knockback direction.
+function spawnHitVisuals(tx,ty,kbDir,source){
+  const isSpecial=(source==='hadouken'||source==='shoryuken'||source==='dokebi'||
+    source==='ironmanlaser'||source==='ironmanmissile'||source==='gomupistol'||
+    source==='gomubazooka'||source==='samchun');
+  const isKick=(source==='kick'||source==='spinkick');
+  shake(isSpecial?12:isKick?5:7);
+  freeze(isSpecial?0.10:isKick?0.04:0.06);
+  flash(isSpecial?'255,180,80':'255,255,255',isSpecial?0.4:0.2);
+  const impactX=tx+kbDir*-8;
+  const impactY=ty-32;
+  // Rim shockwave
+  spawnP({x:impactX,y:impactY,vx:0,vy:0,
+    life:18,maxLife:18,type:'shockwave',
+    color:isSpecial?'rgba(255,180,80,0.95)':'rgba(255,240,180,0.9)',
+    size:5,maxR:isSpecial?70:48,gravity:0});
+  // Inner white shockwave
+  spawnP({x:impactX,y:impactY,vx:0,vy:0,
+    life:14,maxLife:14,type:'shockwave',
+    color:'rgba(255,255,255,0.9)',size:3,maxR:isSpecial?45:30,gravity:0});
+  // Concentric impact burst
+  const sparkCount=isSpecial?28:isKick?12:18;
+  for(let i=0;i<sparkCount;i++){
+    const ang=Math.random()*Math.PI*2;
+    const sp=2+Math.random()*5;
+    spawnP({x:impactX,y:impactY,
+      vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-1,
+      life:24,maxLife:24,type:'spark',
+      color:isSpecial?(i%2?'#ff5050':'#ffaa44'):(i%2?'#fff':'#ffd93d'),
+      size:3+Math.random()*1.5,gravity:0.2});
+  }
+  // Backward debris
+  for(let i=0;i<(isSpecial?14:8);i++){
+    const ang=(kbDir>0?Math.PI:0)+(Math.random()-0.5)*Math.PI*0.6;
+    const sp=3+Math.random()*5;
+    spawnP({x:impactX,y:impactY+(Math.random()-0.5)*15,
+      vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-1,
+      life:30,maxLife:30,type:'spark',
+      color:isSpecial?'#ff8030':'#ffeb3b',size:3,gravity:0.18});
+  }
+  // KO Star
+  spawnP({x:impactX,y:impactY,vx:0,vy:0,
+    life:18,maxLife:18,type:'star',
+    color:isSpecial?'#ff4040':'#ffd93d',size:isSpecial?20:13,
+    rot:0,rotV:0.5,gravity:0});
+  // Secondary stars
+  for(let i=0;i<(isSpecial?5:3);i++){
+    const ang=Math.random()*Math.PI*2;
+    spawnP({x:impactX+Math.cos(ang)*15,y:impactY+Math.sin(ang)*10,
+      vx:Math.cos(ang)*3,vy:Math.sin(ang)*2-1.5,
+      life:24,maxLife:24,type:'star',
+      color:'#fff',size:6+Math.random()*3,
+      rot:Math.random()*6,rotV:0.4,gravity:0.1});
+  }
+  // Sweat splash
+  for(let i=0;i<(isSpecial?12:6);i++){
+    const ang=-Math.PI/2+(Math.random()-0.5)*Math.PI*1.4;
+    const sp=2+Math.random()*3;
+    spawnP({x:tx,y:ty-50,
+      vx:Math.cos(ang)*sp+kbDir*-1.5,vy:Math.sin(ang)*sp-2,
+      life:35,maxLife:35,type:'spark',
+      color:'#cce6ff',size:2.5,gravity:0.25});
+  }
+  // Energy glow
+  spawnP({x:impactX,y:impactY,vx:0,vy:0,
+    life:14,maxLife:14,type:'energy',
+    color:isSpecial?'rgba(255,150,80,1)':'rgba(255,230,140,1)',
+    size:isSpecial?12:8,gravity:0});
+  // Smoke puffs
+  for(let i=0;i<5;i++){
+    spawnP({x:tx+(Math.random()-0.5)*16,y:ty-15+Math.random()*15,
+      vx:(Math.random()-0.5)*2.5,vy:-1-Math.random()*1.5,
+      life:30,maxLife:30,type:'smoke',
+      size:6+Math.random()*4,gravity:-0.04});
+  }
+}
+
 function applyDamageToMe(dmg,kbDir,source,bypassIframe){
   if(!me||me.state==='dead')return;
   if(me.iframe>0&&!bypassIframe)return;
@@ -2302,84 +2381,15 @@ function applyDamageToMe(dmg,kbDir,source,bypassIframe){
     }
   } else {
     isSpecial?sfxHitHeavy():sfxHit();
-    // Kick = brief light knockback. Others = stronger.
     const isKick=source==='kick';
     me.vx+=kbDir*(isSpecial?4.0:isKick?2.2:2.8);
     me.vy=isKick?-2:-3.5;
     me.state='hit';me.stateTime=0;
-    me.hitDuration=0.10; // 모든 타격은 피격자 0.1초 경직 (콤보 가능, 빠른 회복)
+    me.hitDuration=0.10;
     me.hitFlash=0.35;
     if(source==='shoryuken')me.vy=-5.5;
-    shake(isSpecial?12:isKick?5:7);
-    freeze(isSpecial?0.10:isKick?0.04:0.06);
-    flash(isSpecial?'255,180,80':'255,255,255',isSpecial?0.4:0.2);
-    // ====== HIT IMPACT ======
-    const impactX=me.x+kbDir*-8;
-    const impactY=me.y-32;
-    // Rim shockwave (impact ring)
-    spawnP({x:impactX,y:impactY,vx:0,vy:0,
-      life:18,maxLife:18,type:'shockwave',
-      color:isSpecial?'rgba(255,180,80,0.95)':'rgba(255,240,180,0.9)',
-      size:5,maxR:isSpecial?70:48,gravity:0});
-    // Inner white shockwave
-    spawnP({x:impactX,y:impactY,vx:0,vy:0,
-      life:14,maxLife:14,type:'shockwave',
-      color:'rgba(255,255,255,0.9)',size:3,maxR:isSpecial?45:30,gravity:0});
-    // Concentric impact burst (sparks fly OUT in all directions)
-    const sparkCount=isSpecial?28:isKick?12:18;
-    for(let i=0;i<sparkCount;i++){
-      const ang=Math.random()*Math.PI*2;
-      const sp=2+Math.random()*5;
-      spawnP({x:impactX,y:impactY,
-        vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-1,
-        life:24,maxLife:24,type:'spark',
-        color:isSpecial?(i%2?'#ff5050':'#ffaa44'):(i%2?'#fff':'#ffd93d'),
-        size:3+Math.random()*1.5,gravity:0.2});
-    }
-    // Backward debris (knockback direction sparks)
-    for(let i=0;i<(isSpecial?14:8);i++){
-      const ang=(kbDir>0?Math.PI:0)+(Math.random()-0.5)*Math.PI*0.6;
-      const sp=3+Math.random()*5;
-      spawnP({x:impactX,y:impactY+(Math.random()-0.5)*15,
-        vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-1,
-        life:30,maxLife:30,type:'spark',
-        color:isSpecial?'#ff8030':'#ffeb3b',size:3,gravity:0.18});
-    }
-    // KO Star burst (big stylized star at impact)
-    spawnP({x:impactX,y:impactY,vx:0,vy:0,
-      life:18,maxLife:18,type:'star',
-      color:isSpecial?'#ff4040':'#ffd93d',size:isSpecial?20:13,
-      rot:0,rotV:0.5,gravity:0});
-    // Secondary stars
-    for(let i=0;i<(isSpecial?5:3);i++){
-      const ang=Math.random()*Math.PI*2;
-      spawnP({x:impactX+Math.cos(ang)*15,y:impactY+Math.sin(ang)*10,
-        vx:Math.cos(ang)*3,vy:Math.sin(ang)*2-1.5,
-        life:24,maxLife:24,type:'star',
-        color:'#fff',size:6+Math.random()*3,
-        rot:Math.random()*6,rotV:0.4,gravity:0.1});
-    }
-    // Sweat/blood-style splash (small white droplets)
-    for(let i=0;i<(isSpecial?12:6);i++){
-      const ang=-Math.PI/2+(Math.random()-0.5)*Math.PI*1.4;
-      const sp=2+Math.random()*3;
-      spawnP({x:me.x,y:me.y-50,
-        vx:Math.cos(ang)*sp+kbDir*-1.5,vy:Math.sin(ang)*sp-2,
-        life:35,maxLife:35,type:'spark',
-        color:'#cce6ff',size:2.5,gravity:0.25});
-    }
-    // Energy burst (radial glow)
-    spawnP({x:impactX,y:impactY,vx:0,vy:0,
-      life:14,maxLife:14,type:'energy',
-      color:isSpecial?'rgba(255,150,80,1)':'rgba(255,230,140,1)',
-      size:isSpecial?12:8,gravity:0});
-    // Smoke puffs (dust kick-up)
-    for(let i=0;i<5;i++){
-      spawnP({x:me.x+(Math.random()-0.5)*16,y:me.y-15+Math.random()*15,
-        vx:(Math.random()-0.5)*2.5,vy:-1-Math.random()*1.5,
-        life:30,maxLife:30,type:'smoke',
-        size:6+Math.random()*4,gravity:-0.04});
-    }
+    // All hit visuals (shake/flash/freeze + particles) handled by shared helper
+    spawnHitVisuals(me.x,me.y,kbDir,source);
   }
   me.hp-=actualDmg;
   // Samchun multi-hit gets short iframe so successive hits land
@@ -2774,20 +2784,10 @@ function nextRound(winner){
     setTimeout(endMatch,400);
   } else {
     roundNum++;
-    if(isHost){
-      // Host is the single source of truth: notify guest BEFORE starting locally
-      sendMsg({type:'startRound',roundNum,scores:scores.slice()});
-      startRound();
-    } else {
-      // Guest waits for host's 'startRound' signal. Safety fallback: if no message
-      // arrives within 1.5s (lost packet etc.), start locally so the match doesn't stall.
-      setTimeout(()=>{
-        if(roundOver&&!gameRunning&&!matchOver){
-          console.warn('[stickfight] startRound fallback fired (host signal lost)');
-          startRound();
-        }
-      },1500);
-    }
+    // BOTH sides call startRound directly so neither can get stuck waiting.
+    // Host additionally broadcasts a sync message as a redundant safety net.
+    if(isHost)sendMsg({type:'startRound',roundNum,scores:scores.slice()});
+    startRound();
   }
 }
 function endMatch(){
