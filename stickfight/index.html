@@ -233,7 +233,7 @@ const GAME_PREFIX='seoro-stickfight-v2';
 const W=900,H=380;
 const GROUND_Y=330;
 const GRAVITY=0.55;
-const JUMP_VEL=10;
+const JUMP_VEL=15; // 점프 높이 1.5배 (10→15)
 const SPEED_BASE=3.8;
 const RUN_MULT=1.5;
 const DASH_VX=6.5;
@@ -253,6 +253,8 @@ const HADO_DMG=12,SHORYU_DMG=15,PUNCH_DMG=6,KICK_DMG=9;
 const GOMU_PISTOL_DMG=16, GOMU_PISTOL_REACH=280;
 const GOMU_BAZOOKA_DMG=22, GOMU_BAZOOKA_REACH=210;
 const GOMU_SHIELD_DUR=5.0;
+// Spin kick (회오리차기) - 앞↓뒤 + S
+const SPINKICK_COOLDOWN=1.0;  // 사용 후 1초 딜레이
 // Dokebi (도깨비 참수) - sword + 앞↓앞 + A
 const DOKEBI_DMG=48;          // 아도겐 4방 (HADO_DMG 12 × 4)
 const DOKEBI_COOLDOWN=15;     // seconds
@@ -826,7 +828,8 @@ function newPlayer(idx){
     dokebiCooldown:0, // 도깨비 참수 cooldown
     dokebiPhase:null, // 'charge' | 'tremor' | 'recover'
     dokebiTargetX:0,  // teleport destination
-    ironmanLaserCooldown:0 // 친구 아이언맨 레이저 cooldown
+    ironmanLaserCooldown:0, // 친구 아이언맨 레이저 cooldown
+    spinkickCooldown:0      // 회오리차기 cooldown (1초)
   };
 }
 function applyItemEffects(p){
@@ -933,8 +936,9 @@ function updateMe(dt){
   // Auto-face opp
   // Decay dokebi cooldown
   if(me.dokebiCooldown>0)me.dokebiCooldown=Math.max(0,me.dokebiCooldown-dt);
-  // Decay dokebi cooldown
+  // Decay cooldowns
   if(me.ironmanLaserCooldown>0)me.ironmanLaserCooldown=Math.max(0,me.ironmanLaserCooldown-dt);
+  if(me.spinkickCooldown>0)me.spinkickCooldown=Math.max(0,me.spinkickCooldown-dt);
   // Auto-face opp every frame (works during jump + most actions).
   // Lock facing only during states where mid-action flip would break the move:
   // hit/dead (reeling), dokebi (locked teleport vector), samchun (locked slash arc).
@@ -1101,8 +1105,12 @@ function updateMe(dt){
             toast('친구 아이언맨 쿨다운: '+Math.ceil(me.ironmanLaserCooldown)+'초',1200);
             startKick();
           } else startIronmanLaser();
+        } else {
+          if(me.spinkickCooldown>0){
+            // Cooldown blocked - fall back to normal kick
+            startKick();
+          } else startSpinKick();
         }
-        else startSpinKick();
       } else startKick();
     }
   } else if(me.state==='gomushield'){
@@ -1215,20 +1223,17 @@ function updateMe(dt){
   if(me.state==='shoryuken'&&me.stateTime<0.05){
     me.vy=-16;me.vx=me.facing*7;me.onGround=false;
   }
-  // Hurricane kick: spin + travel forward (short range — ~1/9 of map ≈ 100px).
+  // Hurricane kick: STRAIGHT-LINE horizontal flight (no jumping arc).
+  // Hitbox is chest-and-above only so crouching opponent ducks under it.
   if(me.state==='spinkick'){
-    if(me.stateTime<0.04){
-      // Quick takeoff burst
+    if(me.stateTime<0.45){
+      // Straight forward, fixed height (on ground)
       me.vx=me.facing*6.7;
-      me.vy=-3.2;
-      me.onGround=false;
-    } else if(me.stateTime<0.45){
-      // Cruise: short-range forward, slight float
-      me.vx=me.facing*6.7;
-      if(me.y<GROUND_Y-30){me.vy=Math.min(me.vy+0.3,1.5);}
+      me.vy=0; // negate gravity for straight-line flight
     } else {
-      // Recovery: slow down
+      // Recovery
       me.vx*=0.7;
+      me.vy=0;
     }
     // Continuous blue flame trail (denser since faster)
     if(Math.random()<0.85){
@@ -1369,8 +1374,10 @@ function startSpinKick(){
   // No in-place charge — instantly rotates and rushes forward across ~1/3 of map
   // at 2x the previous speed. 8 multi-hits during the rush.
   me.state='spinkick';me.stateTime=0;
-  me.iframe=0.18;
-  me.vx=me.facing*6.7;me.vy=-3.2;me.onGround=false;
+  me.iframe=0; // 무적 시간 제거 - 맞으면 즉시 캔슬되도록
+  me.spinkickCooldown=SPINKICK_COOLDOWN; // 1초 딜레이 시작
+  // 지면 위로 직선 비행 (점프 호 X)
+  me.vx=me.facing*6.7;me.vy=0;me.onGround=true;
   flash('100,180,255',0.35);
   shake(5);
   sfxSpinKick();
@@ -1395,9 +1402,10 @@ function startSpinKick(){
       shake(3);
       if(opp&&opp.state!=='dead'){
         const f=opp.x>me.x?1:-1;
-        const hbW=reach,hbH=60;
+        // Chest-and-above only — crouched opp ducks under
+        const hbW=reach,hbH=30;
         const hbX=me.x+(f>0?BODY_HALF_W:-BODY_HALF_W-hbW);
-        const hbY=me.y-60;
+        const hbY=me.y-72;
         const body=getBodyBox(opp);
         if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
           sendMsg({type:'hit',dmg:2,kbDir:f,kind:'spinkick',bypass:true});
