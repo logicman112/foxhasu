@@ -2568,7 +2568,15 @@ function updateProjectiles(){
     }
   }
 }
+const MAX_PARTICLES=600;
 function spawnP(opts){
+  // Hard cap to prevent unbounded growth from rapid-fire skills (Luffy bazooka,
+  // homing missiles, multi-hit specials). Without this the array could grow to
+  // tens of thousands of particles and crash rendering.
+  if(particles.length>=MAX_PARTICLES){
+    // Drop the oldest 60 to keep room; cheap O(n) splice but rarely triggered.
+    particles.splice(0,60);
+  }
   particles.push(Object.assign({
     x:0,y:0,vx:0,vy:0,life:20,maxLife:20,
     type:'square',color:'#fff',size:3,
@@ -2585,7 +2593,8 @@ function updateParticles(){
     p.life--;
     if(p.life<=0)particles.splice(i,1);
   }
-  // Update afterimages
+  // Update afterimages (also capped)
+  if(afterimages.length>40)afterimages.splice(0,afterimages.length-40);
   for(let i=afterimages.length-1;i>=0;i--){
     afterimages[i].life--;
     if(afterimages[i].life<=0)afterimages.splice(i,1);
