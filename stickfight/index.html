@@ -254,7 +254,7 @@ const GOMU_PISTOL_DMG=16, GOMU_PISTOL_REACH=280;
 const GOMU_BAZOOKA_DMG=22, GOMU_BAZOOKA_REACH=210;
 const GOMU_SHIELD_DUR=5.0;
 // Dokebi (도깨비 참수) - sword + 앞↓앞 + A
-const DOKEBI_DMG=32;          // 2x 고무고무총
+const DOKEBI_DMG=48;          // 아도겐 4방 (HADO_DMG 12 × 4)
 const DOKEBI_COOLDOWN=15;     // seconds
 const DOKEBI_CHARGE=1.0;      // seconds before tremor
 const DOKEBI_TREMOR=0.35;     // seconds of vibration
@@ -262,7 +262,7 @@ const DOKEBI_AFTER=0.55;      // seconds of recovery
 // Ironman skills
 const IRONMAN_MISSILE_DMG=18;       // hadouken 12 * 1.5
 const IRONMAN_HOMING_DMG=9;         // per missile, 2 missiles total = 18 (kick x 2)
-const IRONMAN_LASER_DMG=24;         // hadouken * 2
+const IRONMAN_LASER_DMG=48;         // 도깨비 참수와 동일
 const IRONMAN_LASER_COOLDOWN=20;
 const HADO_SPEED=6.5;
 // Hitbox dimensions (pixels). Reach = extend in front from attacker center
@@ -1219,12 +1219,12 @@ function updateMe(dt){
   if(me.state==='spinkick'){
     if(me.stateTime<0.04){
       // Quick takeoff burst
-      me.vx=me.facing*3.3;
+      me.vx=me.facing*6.7;
       me.vy=-3.2;
       me.onGround=false;
     } else if(me.stateTime<0.45){
       // Cruise: short-range forward, slight float
-      me.vx=me.facing*3.3;
+      me.vx=me.facing*6.7;
       if(me.y<GROUND_Y-30){me.vy=Math.min(me.vy+0.3,1.5);}
     } else {
       // Recovery: slow down
@@ -1370,7 +1370,7 @@ function startSpinKick(){
   // at 2x the previous speed. 8 multi-hits during the rush.
   me.state='spinkick';me.stateTime=0;
   me.iframe=0.18;
-  me.vx=me.facing*3.3;me.vy=-3.2;me.onGround=false;
+  me.vx=me.facing*6.7;me.vy=-3.2;me.onGround=false;
   flash('100,180,255',0.35);
   shake(5);
   sfxSpinKick();
