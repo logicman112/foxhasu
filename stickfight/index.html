@@ -779,11 +779,10 @@ function handleMsg(d){
     stageType=d.stage;
     rainDrops=[];
   } else if(d.type==='roundEnd'){
-    // Host informs round end
-    if(!isHost){
-      scores=d.scores;
-      handleRoundEnd(d.winner);
-    }
+    // Either side can notify the other. handleRoundEnd has roundOver guard so
+    // duplicate processing is safe.
+    if(Array.isArray(d.scores))scores=d.scores;
+    handleRoundEnd(d.winner);
   } else if(d.type==='startRound'){
     // Host triggers new round; sync roundNum/scores. Idempotent — skip if guest
     // already started locally via their own nextRound timer.
@@ -851,10 +850,9 @@ function getReach(p,base,kind){
   return base+SWORD_BONUS;
 }
 function getDmg(p,base){
-  let d=base;
-  if(p.items.has('sword'))d+=4;
-  if(p.items.has('hat'))d+=3; // hat now boosts damage
-  return d;
+  // 모든 스킬은 누가 쓰든 동일한 base 데미지. 아이템 보너스 X.
+  // sword/hat은 reach/특수기 해금 등 다른 역할로만 작용.
+  return base;
 }
 // AABB rectangle intersection
 function rectsHit(ax,ay,aw,ah,bx,by,bw,bh){
@@ -1223,7 +1221,8 @@ function updateMe(dt){
   else if(me.state==='ironmanlaser'&&me.stateTime>0.80)me.state='idle';
   else if(me.state==='hit'&&me.stateTime>(me.hitDuration||0.3))me.state='idle';
   if(me.state==='shoryuken'&&me.stateTime<0.05){
-    me.vy=-16;me.vx=me.facing*7;me.onGround=false;
+    // 워류겐 점프도 일반 점프와 동일 비율로 스케일됨 (JUMP_VEL 기반)
+    me.vy=-JUMP_VEL*1.07;me.vx=me.facing*5;me.onGround=false;
   }
   // Hurricane kick: STRAIGHT-LINE horizontal flight (no jumping arc).
   // Hitbox is chest-and-above only so crouching opponent ducks under it.
@@ -2637,7 +2636,7 @@ function updateProjectiles(){
     }
   }
 }
-const MAX_PARTICLES=600;
+const MAX_PARTICLES=350; // 입자 캡 더 낮춤 (600→350) — 화면 깨짐 방지
 function spawnP(opts){
   // Hard cap to prevent unbounded growth from rapid-fire skills (Luffy bazooka,
   // homing missiles, multi-hit specials). Without this the array could grow to
@@ -2754,7 +2753,9 @@ function endRound(){
       }
     },150);
   } else showRoundBanner('무승부');
-  if(isHost){sendMsg({type:'roundEnd',winner,scores:scores.slice()});}
+  // Whoever calls endRound first notifies the other side - critical so the
+  // killer's client also knows round ended (not just the victim's).
+  sendMsg({type:'roundEnd',winner,scores:scores.slice()});
   setTimeout(()=>nextRound(winner),2200);
 }
 function handleRoundEnd(winner){
@@ -3347,8 +3348,8 @@ function drawStickman(p){
     ctx.beginPath();ctx.arc(cx,cy+5,3,0.2,Math.PI-0.2);ctx.stroke();
     // Straw hat sitting on top of balloon
     drawStrawHat(cx,cy-bodyH*0.92,bodyR*0.65);
-    // Bouncy spark particles around occasionally
-    if(Math.random()<0.45){
+    // Bouncy spark particles around occasionally (low rate — shield lasts 5s)
+    if(Math.random()<0.12){
       const ang=Math.random()*Math.PI*2;
       const r=bodyR+8;
       spawnP({x:p.x+Math.cos(ang)*r,y:p.y+cy+Math.sin(ang)*r,
@@ -4676,10 +4677,13 @@ function drawParticles(){
       ctx.fillStyle=grd;
       ctx.beginPath();ctx.arc(p.x,p.y,p.size*2.2,0,Math.PI*2);ctx.fill();
     } else if(p.type==='spark'){
-      ctx.shadowBlur=10;ctx.shadowColor=p.color;
+      // No shadowBlur - it's the #1 perf killer with hundreds of particles.
+      // Instead draw colored ring + white core for visible glow without GPU stall.
+      const r=p.size*lifeT;
+      ctx.fillStyle=p.color;
+      ctx.beginPath();ctx.arc(p.x,p.y,r*1.6,0,Math.PI*2);ctx.fill();
       ctx.fillStyle='#fff';
-      ctx.beginPath();ctx.arc(p.x,p.y,p.size*lifeT,0,Math.PI*2);ctx.fill();
-      ctx.shadowBlur=0;
+      ctx.beginPath();ctx.arc(p.x,p.y,r*0.7,0,Math.PI*2);ctx.fill();
     } else if(p.type==='shockwave'){
       const r=p.size+(1-lifeT)*p.maxR;
       ctx.strokeStyle=p.color;
@@ -4689,9 +4693,9 @@ function drawParticles(){
       ctx.strokeStyle='rgba(255,255,255,'+alpha*0.7+')';
       ctx.beginPath();ctx.arc(p.x,p.y,r-3,0,Math.PI*2);ctx.stroke();
     } else if(p.type==='arc'){
-      ctx.shadowBlur=8;ctx.shadowColor=p.color;
+      // No shadowBlur for arcs - too expensive at scale
       ctx.strokeStyle=p.color;
-      ctx.lineWidth=2;
+      ctx.lineWidth=2.5;
       ctx.beginPath();
       ctx.moveTo(p.x,p.y);
       let cx=p.x,cy=p.y;
@@ -4702,7 +4706,6 @@ function drawParticles(){
         ctx.lineTo(cx,cy);
       }
       ctx.stroke();
-      ctx.shadowBlur=0;
     } else if(p.type==='ember'){
       const flicker=Math.sin(p.life*0.6)*0.3+0.7;
       const grd=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size*flicker);
