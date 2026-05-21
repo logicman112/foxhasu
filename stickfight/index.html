@@ -2817,9 +2817,7 @@ function startYataKagami(){
   me.vy=-YATA_LIFT_VY;
   me.onGround=false;
   me.skillBanner={text:'팔척경곡옥!!',color:'#ffe040',time:0};
-  sfxTensoun(); // 짧은 빛 사운드
-  flash('255,230,80',0.35);
-  shake(4);
+  // 플래시/큰 흔들림 제거 - 손에서 빛 응축 입자만
   // 발사 - 4발을 짧은 간격으로 (다발성)
   me._yataFired=0;
   // 점프 정점 직전부터 발사
@@ -2852,149 +2850,146 @@ function startYataKagami(){
 
 // ===== 빛의 속도로 차여본 적 있나? (kizaru + 앞↓뒤 + S) - 궁극기 =====
 function startKizaruKick(){
-  me.state='kizarukick';me.stateTime=0;me.vx=0;
+  me.state='kizarukick';me.stateTime=0;me.vx=0;me.vy=0;
   me.kizaruKickCooldown=KIZARU_KICK_COOLDOWN;
   me.iframe=KIZARU_KICK_VANISH+KIZARU_KICK_TELEPORT+0.10;
   me.inputHistory=[];
   me._kizaruKickDealt=false;
-  me._kizaruKickPhaseFx=0;
+  me._kizaruKickArrived=false;
   me.skillBanner={text:'빛의 속도로 차여본 적 있나?',color:'#ffe040',time:0};
-  // 사라지는 순간 - 위치 기록
-  me._vanishX=me.x;
-  me._vanishY=me.y;
-  // 목표 위치는 사라짐 끝 시점에 다시 계산 (상대가 움직였을 수 있음)
+  // 시작 위치 + 목표 위치 즉시 계산 (사라짐 X, 좌표 안정)
+  me._kkStartX=me.x;
+  me._kkStartY=me.y;
+  if(opp){
+    // 상대 이동중이면 살짝 빗나감 (피할 수 있게)
+    const oppMoving=Math.abs(opp.vx)>1.5;
+    const aimX=opp.x + (oppMoving?opp.vx*3:0);
+    me._kkTargetX=Math.max(60,Math.min(W-60,aimX));
+    // 상대 머리 위 (점프 중이면 그만큼 위)
+    me._kkTargetY=Math.max(40, opp.y-110);
+  } else {
+    me._kkTargetX=me.x;
+    me._kkTargetY=me.y-110;
+  }
   sfxKizaruVanish();
-  flash('255,230,80',0.6);
-  shake(7);
-  // 빛으로 변하는 입자 폭발
-  for(let k=0;k<34;k++){
+  shake(4); // 가볍게만
+  // 시작 시 빛 응축 입자만 (플래시 X)
+  for(let k=0;k<14;k++){
     const ang=Math.random()*Math.PI*2;
     spawnP({x:me.x,y:me.y-30,
-      vx:Math.cos(ang)*(3+Math.random()*4),vy:Math.sin(ang)*4-1,
-      life:30,maxLife:30,type:'spark',color:k%2?'#ffe040':'#ffffff',size:4,gravity:0.05});
+      vx:Math.cos(ang)*(1.5+Math.random()*2),vy:Math.sin(ang)*1.5-1,
+      life:18,maxLife:18,type:'spark',color:k%2?'#ffe040':'#ffffff',size:3,gravity:0.05});
   }
-  spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
-    life:30,maxLife:30,type:'shockwave',color:'rgba(255,230,80,0.95)',size:6,maxR:80,gravity:0});
   sendMsg({type:'attack',kind:'kizarukick'});
 }
 
 function updateKizaruKick(dt){
   if(!me||me.state!=='kizarukick')return;
   const t=me.stateTime;
-  // ===== 1. VANISH - 빛으로 변하면서 사라짐 =====
+  // ===== 1. STARTUP - 시작 위치에서 살짝 모으기 =====
   if(t<KIZARU_KICK_VANISH){
-    me.vx=0;me.vy=0; // 정지
-    // 사라지는 입자 (시간 따라 점점 빛으로 분해)
-    if(Math.random()<0.95){
-      spawnP({x:me._vanishX+(Math.random()-0.5)*22,y:me._vanishY-15-Math.random()*40,
-        vx:(Math.random()-0.5)*2,vy:-1-Math.random()*1.5,
-        life:18,maxLife:18,type:'spark',color:'#ffe040',size:2.5+Math.random()*1.5,gravity:-0.02});
-    }
-  }
-  // ===== 2. TELEPORT - 상대 머리 위로 이동 =====
-  else if(t<KIZARU_KICK_VANISH+KIZARU_KICK_TELEPORT){
-    // 첫 진입 시 위치 결정 (상대가 이동중이면 빗나갈 수 있음)
-    if(!me._kizaruKickRelocated){
-      me._kizaruKickRelocated=true;
-      // 상대의 현재 위치 + 이동 방향 약간 보정 (= 미스 가능성)
-      if(opp){
-        const oppMoving=Math.abs(opp.vx)>1.5;
-        // 상대 머리 위
-        const aimX=opp.x + (oppMoving?opp.vx*5:0); // 상대 이동중이면 약간 빗나감 (앞으로 보정 안 됨)
-        // 화면 경계 클램프
-        me.x=Math.max(60,Math.min(W-60,aimX));
-        me.y=Math.max(40,opp.y-120); // 머리 위
-        me.facing=opp.x<me.x?-1:1; // 아래 방향
-        me._teleportLanded=true;
-        // 텔레포트 도착 빛 폭발
-        flash('255,255,200',0.5);
-        for(let k=0;k<30;k++){
-          const ang=Math.random()*Math.PI*2;
-          spawnP({x:me.x,y:me.y,
-            vx:Math.cos(ang)*(3+Math.random()*4),vy:Math.sin(ang)*3-1,
-            life:24,maxLife:24,type:'spark',color:k%2?'#ffe040':'#fff',size:4,gravity:0.05});
-        }
-        spawnP({x:me.x,y:me.y,vx:0,vy:0,
-          life:24,maxLife:24,type:'shockwave',color:'rgba(255,230,80,0.95)',size:5,maxR:80,gravity:0});
-        spawnP({x:me.x,y:me.y,vx:0,vy:0,
-          life:18,maxLife:18,type:'star',color:'#ffe040',size:20,rot:0,rotV:0.4,gravity:0});
-      }
-    }
     me.vx=0;me.vy=0;
-    // 빛 응축 효과 (텔레포트 도착 후 차징)
-    if(me._teleportLanded && Math.random()<0.9){
+    me.x=me._kkStartX;
+    me.y=me._kkStartY;
+    // 발 밑/주변 노란 응축 입자만
+    if(Math.random()<0.6){
       const ang=Math.random()*Math.PI*2;
-      const r=35+Math.random()*15;
-      spawnP({x:me.x+Math.cos(ang)*r,y:me.y+Math.sin(ang)*r,
-        vx:-Math.cos(ang)*3,vy:-Math.sin(ang)*3,
-        life:14,maxLife:14,type:'energy',color:'#ffe040',size:3,gravity:0});
+      const r=18+Math.random()*10;
+      spawnP({x:me.x+Math.cos(ang)*r,y:me.y-30+Math.sin(ang)*r*0.6,
+        vx:-Math.cos(ang)*2,vy:-Math.sin(ang)*1.5,
+        life:12,maxLife:12,type:'spark',color:'#ffe040',size:2.5,gravity:0});
     }
   }
-  // ===== 3. DROP - 발차기 내려찍기 =====
+  // ===== 2. STREAK - 빛줄기로 빠르게 이동 (보임) =====
+  else if(t<KIZARU_KICK_VANISH+KIZARU_KICK_TELEPORT){
+    const p=(t-KIZARU_KICK_VANISH)/KIZARU_KICK_TELEPORT;
+    // 선형 보간으로 이동 (캐릭터는 계속 보임)
+    me.x=me._kkStartX+(me._kkTargetX-me._kkStartX)*p;
+    me.y=me._kkStartY+(me._kkTargetY-me._kkStartY)*p;
+    me.vx=0;me.vy=0;
+    // 경로 따라 노란 잔상
+    if(Math.random()<0.95){
+      spawnP({x:me.x+(Math.random()-0.5)*10,y:me.y-15-Math.random()*30,
+        vx:(Math.random()-0.5)*1.5,vy:(Math.random()-0.5)*1.5,
+        life:14,maxLife:14,type:'spark',color:Math.random()<0.5?'#ffe040':'#fff',size:2.5,gravity:0});
+    }
+    // 도착 직전 - facing 결정
+    if(p>=0.95 && !me._kizaruKickArrived){
+      me._kizaruKickArrived=true;
+      me.facing=opp?(opp.x<me.x?-1:1):me.facing;
+      // 작은 도착 폭발 (플래시 없음)
+      for(let k=0;k<14;k++){
+        const ang=Math.random()*Math.PI*2;
+        spawnP({x:me.x,y:me.y,
+          vx:Math.cos(ang)*1.8,vy:Math.sin(ang)*1.8,
+          life:16,maxLife:16,type:'spark',color:'#ffe040',size:3,gravity:0.05});
+      }
+      spawnP({x:me.x,y:me.y,vx:0,vy:0,
+        life:18,maxLife:18,type:'shockwave',color:'rgba(255,230,80,0.85)',size:4,maxR:50,gravity:0});
+    }
+  }
+  // ===== 3. DROP - 빠른 발차기 내려찍기 =====
   else if(t<KIZARU_KICK_VANISH+KIZARU_KICK_TELEPORT+KIZARU_KICK_DROP){
     const dt2=t-KIZARU_KICK_VANISH-KIZARU_KICK_TELEPORT;
-    const dropP=dt2/KIZARU_KICK_DROP;
-    // 빠른 하강 (빛처럼)
+    const dropP=Math.min(1,dt2/KIZARU_KICK_DROP);
+    // me._kkTargetY 에서 GROUND_Y 까지 빠르게 내려옴
     me.vx=0;
-    me.vy=24*dropP; // 가속 하강
-    me.y+=me.vy*dt*60; // ad-hoc fast descent
-    // 빛 잔상
-    if(Math.random()<0.95){
-      spawnP({x:me.x+(Math.random()-0.5)*14,y:me.y-Math.random()*40,
-        vx:(Math.random()-0.5)*1,vy:-2-Math.random()*1.5,
-        life:14,maxLife:14,type:'spark',color:'#ffe040',size:3,gravity:0});
+    me.x=me._kkTargetX;
+    me.y=me._kkTargetY+(GROUND_Y-me._kkTargetY)*dropP;
+    me.vy=0;
+    // 빛 잔상 (다리 아래로 흘러내림)
+    if(Math.random()<0.9){
+      spawnP({x:me.x+(Math.random()-0.5)*10,y:me.y-Math.random()*30,
+        vx:(Math.random()-0.5)*1,vy:-1.5-Math.random()*1,
+        life:12,maxLife:12,type:'spark',color:'#ffe040',size:2.5,gravity:0});
     }
-    // 임팩트 - 상대 위치 도착 또는 땅 도착
-    if(!me._kizaruKickDealt && (dropP>0.7 || me.y>=GROUND_Y-30 || (opp&&me.y>=opp.y-30))){
+    // 임팩트 - 발차기 끝 또는 상대 위치 도달
+    const reachedGround=me.y>=GROUND_Y-10;
+    const reachedOpp=opp&&Math.abs(me.x-opp.x)<55 && me.y>=opp.y-40;
+    if(!me._kizaruKickDealt && (dropP>=0.95 || reachedGround || reachedOpp)){
       me._kizaruKickDealt=true;
       sfxKizaruKickImpact();
-      shake(20);
-      flash('255,255,200',0.85);
-      freeze(0.20);
-      // 사정거리 안 + 상대가 점프중이거나 이동중이면 빗나갈 수 있음
+      shake(14);
+      freeze(0.10);
+      // 적중 판정
       if(opp&&opp.state!=='dead'){
         const xDiff=Math.abs(opp.x-me.x);
         const yDiff=Math.abs(opp.y-me.y);
-        const hit=xDiff<55 && yDiff<90; // 좁은 적중 범위 (피할 수 있음)
+        const hit=xDiff<55 && yDiff<90;
         if(hit){
           const kbDir=opp.x>me.x?1:-1;
           sendMsg({type:'hit',dmg:KIZARU_KICK_DMG,kbDir,kind:'kizarukick',bypass:true});
           spawnHitVisuals(opp.x,opp.y,kbDir,'kizarukick');
-          // 거대한 임팩트 폭발
-          for(let k=0;k<50;k++){
+          // 임팩트 폭발
+          for(let k=0;k<32;k++){
             const ang=Math.random()*Math.PI*2;
             spawnP({x:opp.x,y:opp.y-30,
-              vx:Math.cos(ang)*(4+Math.random()*7),vy:Math.sin(ang)*5-2,
-              life:42,maxLife:42,type:'spark',
-              color:k%3===0?'#fff':k%3===1?'#ffe040':'#fff5b0',size:5,gravity:0.15});
-          }
-          // 충격파 3겹
-          spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,
-            life:36,maxLife:36,type:'shockwave',color:'rgba(255,230,80,0.95)',size:7,maxR:130,gravity:0});
-          spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,
-            life:30,maxLife:30,type:'shockwave',color:'rgba(255,255,200,0.85)',size:6,maxR:90,gravity:0});
-          spawnP({x:opp.x,y:GROUND_Y-2,vx:0,vy:0,
-            life:40,maxLife:40,type:'shockwave',color:'rgba(255,230,80,0.7)',size:6,maxR:170,gravity:0});
-          // 큰 별 폭발
-          spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,
-            life:30,maxLife:30,type:'star',color:'#ffe040',size:36,rot:0,rotV:0.5,gravity:0});
-          // 땅 먼지
-          for(let k=0;k<20;k++){
-            spawnP({x:opp.x+(Math.random()-0.5)*60,y:GROUND_Y-2,
-              vx:(Math.random()-0.5)*4,vy:-1.5-Math.random()*2.5,
-              life:36,maxLife:36,type:'smoke',size:6+Math.random()*4,gravity:-0.03});
-          }
-        } else {
-          // 빗나감 - 땅에 큰 임팩트만
-          for(let k=0;k<30;k++){
-            const ang=Math.random()*Math.PI*2;
-            spawnP({x:me.x,y:GROUND_Y-2,
               vx:Math.cos(ang)*(3+Math.random()*5),vy:Math.sin(ang)*4-2,
               life:34,maxLife:34,type:'spark',
-              color:k%2?'#ffe040':'#fff',size:4,gravity:0.15});
+              color:k%3===0?'#fff':k%3===1?'#ffe040':'#fff5b0',size:4,gravity:0.15});
+          }
+          spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,
+            life:28,maxLife:28,type:'shockwave',color:'rgba(255,230,80,0.9)',size:6,maxR:100,gravity:0});
+          spawnP({x:opp.x,y:GROUND_Y-2,vx:0,vy:0,
+            life:32,maxLife:32,type:'shockwave',color:'rgba(255,230,80,0.7)',size:5,maxR:130,gravity:0});
+          spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,
+            life:24,maxLife:24,type:'star',color:'#ffe040',size:26,rot:0,rotV:0.5,gravity:0});
+          // 땅 먼지
+          for(let k=0;k<14;k++){
+            spawnP({x:opp.x+(Math.random()-0.5)*50,y:GROUND_Y-2,
+              vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,
+              life:30,maxLife:30,type:'smoke',size:5+Math.random()*3,gravity:-0.03});
+          }
+        } else {
+          // 빗나감 - 땅 임팩트만
+          for(let k=0;k<18;k++){
+            const ang=Math.random()*Math.PI*2;
+            spawnP({x:me.x,y:GROUND_Y-2,
+              vx:Math.cos(ang)*(2+Math.random()*4),vy:Math.sin(ang)*3-2,
+              life:28,maxLife:28,type:'spark',color:k%2?'#ffe040':'#fff',size:3,gravity:0.15});
           }
           spawnP({x:me.x,y:GROUND_Y-2,vx:0,vy:0,
-            life:30,maxLife:30,type:'shockwave',color:'rgba(255,230,80,0.85)',size:5,maxR:120,gravity:0});
+            life:24,maxLife:24,type:'shockwave',color:'rgba(255,230,80,0.8)',size:4,maxR:90,gravity:0});
           toast('빗나감!',900);
         }
       }
@@ -3007,7 +3002,7 @@ function updateKizaruKick(dt){
   // ===== 4. AFTER - 후딜 =====
   else {
     me.vx=0;
-    if(me.y<GROUND_Y){me.y=GROUND_Y;me.vy=0;me.onGround=true;}
+    me.y=GROUND_Y;me.vy=0;me.onGround=true;
   }
 }
 
@@ -4130,11 +4125,6 @@ function drawArena(){
 function drawStickman(p){
   if(!p)return;
   const t=performance.now()/1000;
-  // 키자루 궁극기 사라짐 단계 - 캐릭터 안 보이게
-  if(p.state==='kizarukick'&&p.stateTime>=KIZARU_KICK_VANISH*0.5&&p.stateTime<KIZARU_KICK_VANISH+KIZARU_KICK_TELEPORT-0.05){
-    // 사라지는 빛 잔상만 (실제 캐릭터는 안 그림)
-    return;
-  }
   // 천총운검 활성 - 캐릭터 발 밑 + 주변 노란 오라
   if(p.tensounActive && p.state!=='dead'){
     ctx.save();
@@ -4147,14 +4137,6 @@ function drawStickman(p){
     ctx.restore();
   }
   ctx.save();
-  // 키자루 궁극기 텔레포트 후 - 빛 잔상 (alpha 50%)
-  let _kizaruFade=1;
-  if(p.state==='kizarukick'){
-    if(p.stateTime<KIZARU_KICK_VANISH){
-      _kizaruFade=Math.max(0,1-(p.stateTime/KIZARU_KICK_VANISH));
-    }
-  }
-  ctx.globalAlpha=_kizaruFade;
   // Apply dokebi tremor offset during tremor phase (works for both me and opp)
   let tremorX=0;
   if(p.state==='dokebi'){
