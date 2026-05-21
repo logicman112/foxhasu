@@ -293,8 +293,8 @@ const TENSOUN_DMG_MULT=1.5;       // 데미지 1.5배
 // 키자루 팔척경곡옥 - kizaru + 앞↓앞 + A (4발 레이저)
 const YATA_DMG=8;                 // 아도겐(12)의 70% ≈ 8
 const YATA_COOLDOWN=2.0;
-const YATA_BACKSTEP_VX=4;
-const YATA_LIFT_VY=11;
+const YATA_BACKSTEP_VX=0;         // 도약 없음 (캐릭터 그 자리에서 발사)
+const YATA_LIFT_VY=0;
 const YATA_LASER_SPEED=14;        // 빠른 속도
 const YATA_LASER_COUNT=4;
 // 키자루 궁극기 빛의 발차기 - kizaru + 앞↓뒤 + S
@@ -1479,6 +1479,7 @@ function updateMe(dt){
   if(me.state==='gomustamp')updateGomuStamp(dt);
   if(me.state==='heukseung')updateHeukseung(dt);
   if(me.state==='kizarukick')updateKizaruKick(dt);
+  if(me.state==='yatakagami')updateYataKagami(dt);
   // 천총운검 활성 시 노란 잔상 효과 (이동중)
   if(me.tensounActive && Math.abs(me.vx)>0.5){
     if(Math.random()<0.6){
@@ -2782,10 +2783,9 @@ function startTensoun(){
   me.iframe=TENSOUN_STARTUP+0.05;
   me.inputHistory=[];
   sfxTensoun();
-  flash('255,230,80',0.5);
-  shake(4);
+  // 화면 플래시/흔들림 제거 - 입자만으로 빛 검 표현
   // 빛 검 형성 - 노란 입자가 손에서 모여서 검 형태 만듬
-  for(let k=0;k<26;k++){
+  for(let k=0;k<20;k++){
     const ang=Math.random()*Math.PI*2;
     const r=30+Math.random()*20;
     spawnP({x:me.x+Math.cos(ang)*r,y:me.y-36+Math.sin(ang)*r,
@@ -2812,15 +2812,13 @@ function startYataKagami(){
   me.yataCooldown=YATA_COOLDOWN;
   me.iframe=0.20;
   me.inputHistory=[];
-  // 뒤쪽 대각선 위로 백스텝 도약
-  me.vx=-me.facing*YATA_BACKSTEP_VX;
-  me.vy=-YATA_LIFT_VY;
-  me.onGround=false;
+  // 캐릭터를 그 자리에 고정 (도약/이동 없음)
+  me.vx=0;
+  me.vy=0;
   me.skillBanner={text:'팔척경곡옥!!',color:'#ffe040',time:0};
-  // 플래시/큰 흔들림 제거 - 손에서 빛 응축 입자만
+  // 화면 플래시/흔들림 없음
   // 발사 - 4발을 짧은 간격으로 (다발성)
   me._yataFired=0;
-  // 점프 정점 직전부터 발사
   for(let i=0;i<YATA_LASER_COUNT;i++){
     setTimeout(()=>{
       if(!me||me.state!=='yatakagami')return;
@@ -2834,18 +2832,28 @@ function startYataKagami(){
         owner:myIdx,kind:'yata',life:140,maxLife:140,hue:50
       });
       sfxKizaruLaser();
-      // 발사 머즐 플래시
-      for(let k=0;k<8;k++){
-        const a=Math.atan2(vy,vx)+(Math.random()-0.5)*0.6;
+      // 발사 머즐 - 캐릭터를 가리지 않도록 적게 + 캐릭터 반대편으로
+      for(let k=0;k<4;k++){
+        const a=Math.atan2(vy,vx)+(Math.random()-0.5)*0.4;
         spawnP({x:sx,y:sy,
-          vx:Math.cos(a)*(2+Math.random()*3),vy:Math.sin(a)*(2+Math.random()*3),
-          life:14,maxLife:14,type:'spark',color:k%2?'#ffe040':'#fff',size:3,gravity:0.02});
+          vx:Math.cos(a)*(1.5+Math.random()*2),vy:Math.sin(a)*(1.5+Math.random()*2),
+          life:10,maxLife:10,type:'spark',color:k%2?'#ffe040':'#fff',size:2,gravity:0.02});
       }
       // 상대에게 전송
       sendMsg({type:'projectile',x:sx,y:sy,vx,vy,dmg:YATA_DMG,owner:myIdx,kind:'yata',hue:50});
     },150+i*100);
   }
   sendMsg({type:'attack',kind:'yatakagami'});
+}
+
+// 야타카가미 - 발사 중 캐릭터 위치 완전 고정 (시야에서 사라지지 않도록)
+function updateYataKagami(dt){
+  if(!me||me.state!=='yatakagami')return;
+  // 위치/속도 완전 고정 - 캐릭터 항상 보임
+  me.vx=0;
+  me.vy=0;
+  if(me.y<GROUND_Y)me.y=GROUND_Y;
+  me.onGround=true;
 }
 
 // ===== 빛의 속도로 차여본 적 있나? (kizaru + 앞↓뒤 + S) - 궁극기 =====
