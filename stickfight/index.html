@@ -261,16 +261,23 @@ const HERO_ITEMS=['sword','straw','ironman'];
 const HADO_DMG=12,SHORYU_DMG=15,PUNCH_DMG=6,KICK_DMG=9;
 // Gomu Gomu (Luffy) skills
 const GOMU_PISTOL_DMG=16, GOMU_PISTOL_REACH=280;
-const GOMU_BAZOOKA_DMG=22, GOMU_BAZOOKA_REACH=210;
+const GOMU_BAZOOKA_DMG=22, GOMU_BAZOOKA_REACH=420; // 사정거리 2배
+const GOMU_BAZOOKA_STRIKE_MS=150; // 발사 타이밍 2배 빠르게 (300→150)
 const GOMU_SHIELD_DUR=5.0;
 // Spin kick (회오리차기) - 앞↓뒤 + S
 const SPINKICK_COOLDOWN=1.0;  // 사용 후 1초 딜레이
 // Dokebi (도깨비 참수) - sword + 앞↓앞 + A
-const DOKEBI_DMG=48;          // 아도겐 4방 (HADO_DMG 12 × 4)
-const DOKEBI_COOLDOWN=15;     // seconds
-const DOKEBI_CHARGE=1.0;      // seconds before tremor
-const DOKEBI_TREMOR=0.35;     // seconds of vibration
-const DOKEBI_AFTER=0.55;      // seconds of recovery
+const DOKEBI_DMG=96;          // 도깨비 2배 (48→96)
+const DOKEBI_COOLDOWN=6;      // 쿨다운 15→6
+const DOKEBI_CHARGE=0.5;      // 차징 1.0→0.5 (반)
+const DOKEBI_TREMOR=0.18;     // 떨림 0.35→0.18 (반)
+const DOKEBI_AFTER=0.30;      // 회복 0.55→0.30 (반)
+// 고무고무 jet 채찍 - straw + 앞↓뒤 + S (도깨비참수와 동일 스탯)
+const JET_WHIP_DMG=96;
+const JET_WHIP_COOLDOWN=6;
+const JET_WHIP_CHARGE=0.18;   // 점프 + 채찍 늘림
+const JET_WHIP_STRIKE=0.32;   // 채찍 임팩트 시점
+const JET_WHIP_AFTER=0.20;    // 회복
 // Ironman skills
 const IRONMAN_MISSILE_DMG=18;       // hadouken 12 * 1.5
 const IRONMAN_HOMING_DMG=9;         // per missile, 2 missiles total = 18 (kick x 2)
@@ -1523,6 +1530,7 @@ function startSpinKick(){
         const body=getBodyBox(opp);
         if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
           sendMsg({type:'hit',dmg:2,kbDir:f,kind:'spinkick',bypass:true});
+          spawnHitVisuals(opp.x,opp.y,f,'spinkick');
           for(let k=0;k<4;k++){
             spawnP({x:opp.x,y:opp.y-30,
               vx:-f*(2+Math.random()*2),vy:-Math.random()*2,
@@ -2321,6 +2329,7 @@ function startSamchun(){
         if(rectsHit(hbX,hbY,hbW,hbH,body.x,body.y,body.w,body.h)){
           // Bypass iframe for multi-hit
           sendMsg({type:'hit',dmg:4,kbDir:me.facing,kind:'samchun',bypass:true});
+          spawnHitVisuals(opp.x,opp.y,me.facing,'samchun');
           // Local impact particles
           for(let k=0;k<4;k++){
             spawnP({x:opp.x,y:opp.y-30,
@@ -2840,9 +2849,13 @@ function startRound(){
     sendMsg({type:'stage',stage:stageType});
   }
   rainDrops=[];
-  // Preserve items only (everything else: position/HP/state/cooldowns reset)
-  const myItems=me?Array.from(me.items):[];
-  const oppItems=opp?Array.from(opp.items):[];
+  // Preserve items only across rounds 2+. Round 1 (or no prior players)
+  // must start barehanded - no leftover items from a previous match.
+  let myItems=[],oppItems=[];
+  if(roundNum>1&&me&&opp){
+    myItems=Array.from(me.items);
+    oppItems=Array.from(opp.items);
+  }
   me=newPlayer(myIdx);
   opp=newPlayer(1-myIdx);
   me.items=new Set(myItems);
