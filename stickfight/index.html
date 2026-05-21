@@ -263,7 +263,6 @@ const HADO_DMG=12,SHORYU_DMG=15,PUNCH_DMG=6,KICK_DMG=9;
 const GOMU_PISTOL_DMG=16, GOMU_PISTOL_REACH=280;
 const GOMU_BAZOOKA_DMG=22, GOMU_BAZOOKA_REACH=420; // 사정거리 2배
 const GOMU_BAZOOKA_STRIKE_MS=150; // 발사 타이밍 2배 빠르게 (300→150)
-const GOMU_SHIELD_DUR=5.0;
 // Spin kick (회오리차기) - 앞↓뒤 + S
 const SPINKICK_COOLDOWN=1.0;  // 사용 후 1초 딜레이
 // Dokebi (도깨비 참수) - sword + 앞↓앞 + A
@@ -472,15 +471,6 @@ function sfxGomuBazooka(){
   },220);
   // Aftershock
   setTimeout(()=>{tone(60,0.25,'sine',0.10,30);noise(0.20,0.07,1000);},400);
-}
-function sfxGomuShield(){
-  // Bouncy balloon inflate
-  tone(300,0.10,'sine',0.06,800);
-  tone(900,0.12,'sine',0.05,400,0.10);
-  // Squeaky stretch
-  setTimeout(()=>{tone(1500,0.08,'square',0.05,2400);tone(800,0.08,'square',0.04,200,0.05);},120);
-  // Rubber bounce
-  setTimeout(()=>{tone(220,0.18,'square',0.07,1100);},250);
 }
 // Dokebi sound effects
 function sfxDokebiCharge(){
@@ -949,7 +939,6 @@ function newPlayer(idx){
     running:false, // run mode while holding forward after double tap
     skillBanner:null, // {text,color,time}
     _lastBannerState:null, // tracks state changes for opp banner detection
-    balloonShield:false, // active during 고무고무 방패
     dokebiCooldown:0, // 도깨비 참수 cooldown
     dokebiPhase:null, // 'charge' | 'tremor' | 'recover'
     dokebiTargetX:0,  // teleport destination
@@ -1151,19 +1140,8 @@ function updateMe(dt){
   }
   // Jump
   if(pressed(KB.up)&&me.jumps<getMaxJumps(me)&&!me.blocking&&me.state!=='hit'){
-    const isShield=(me.state==='gomushield');
-    const isSuper=!isShield&&(me.dashTime>0||me.running)&&me.jumps===0;
-    if(isShield){
-      // Balloon shield jump: small bouncy hop, do NOT change state
-      me.vy=-JUMP_VEL*0.85;
-      sfxJump();
-      // Bounce particles
-      for(let i=0;i<6;i++){
-        spawnP({x:me.x+(Math.random()-0.5)*14,y:me.y-2,
-          vx:(Math.random()-0.5)*2,vy:-0.5-Math.random(),
-          life:14,maxLife:14,type:'spark',color:'#ffd060',size:3,gravity:0.1});
-      }
-    } else if(isSuper){
+    const isSuper=(me.dashTime>0||me.running)&&me.jumps===0;
+    if(isSuper){
       // Super jump: high horizontal + extra vertical (KOF style)
       me.vy=-JUMP_VEL*1.35;
       me.vx=me.facing*9;
@@ -1181,7 +1159,7 @@ function updateMe(dt){
       me.vy=-JUMP_VEL*0.8;sfxDjump();
     }
     me.jumps++;me.onGround=false;
-    if(!isShield){me.state='jump';me.stateTime=0;}
+    me.state='jump';me.stateTime=0;
   }
   // Jacket flight: hold SPACE in air, glide for up to 2 seconds
   if(me.items.has('jacket')&&held(KB.up)&&!me.onGround&&me.flyTime>0&&me.state!=='hit'){
@@ -1200,7 +1178,7 @@ function updateMe(dt){
   if(me.onGround && me.items.has('jacket')) me.flyTime=2;
   else if(me.onGround) me.flyTime=0;
   // Attacks (block during special states)
-  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield','dokebi','ironmanmissile','ironmanhoming','ironmanlaser','gomustamp'].includes(me.state)){
+  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser','gomustamp'].includes(me.state)){
     // Force-update facing the instant an attack is initiated so jump-kick / dash-punch
     // never whiffs in the wrong direction even when opp crossed over mid-air.
     if((pressed(KB.punch)||pressed(KB.kick))&&opp){
@@ -1219,14 +1197,18 @@ function updateMe(dt){
         else if(me.items.has('ironman'))startIronmanHoming();
         else startShoryuken();
       } else if(sp==='hadouken'){
-        if(me.items.has('sword'))startSamchun();
-        else if(me.items.has('ironman'))startIronmanMissile();
+        if(me.items.has('ironman'))startIronmanMissile();
         else startHadouken();
       } else startPunch();
     } else if(pressed(KB.kick)){
       const sp=checkSpecial();
       if(sp==='spinkick'){
-        if(me.items.has('straw')){
+        if(me.items.has('sword')){
+          // 조로 앞아래뒤+S = 삼천세계
+          startSamchun();
+        }
+        else if(me.items.has('straw')){
+          // 루피 앞아래뒤+S = 고무고무 스탬프
           if(me.gomuStampCooldown>0){
             toast('고무고무 스탬프 쿨다운: '+Math.ceil(me.gomuStampCooldown)+'초',1200);
             startKick();
@@ -1244,14 +1226,6 @@ function updateMe(dt){
           } else startSpinKick();
         }
       } else startKick();
-    }
-  } else if(me.state==='gomushield'){
-    // While shielded: only the spinkick command (앞아래뒤 + S) toggles it OFF
-    if(pressed(KB.kick)){
-      const sp=checkSpecial();
-      if(sp==='spinkick'){
-        endGomuShield();
-      }
     }
   }
   // Physics
@@ -1346,7 +1320,6 @@ function updateMe(dt){
   else if(me.state==='spinkick'&&me.stateTime>0.55)me.state='idle';
   else if(me.state==='gomupistol'&&me.stateTime>0.7)me.state='idle';
   else if(me.state==='gomubazooka'&&me.stateTime>0.7)me.state='idle';
-  else if(me.state==='gomushield'&&me.stateTime>GOMU_SHIELD_DUR)me.state='idle';
   else if(me.state==='dokebi'&&me.stateTime>(DOKEBI_CHARGE+DOKEBI_TREMOR+DOKEBI_AFTER))me.state='idle';
   else if(me.state==='gomustamp'&&me.stateTime>(JET_WHIP_CHARGE+JET_WHIP_STRIKE+JET_WHIP_AFTER))me.state='idle';
   else if(me.state==='ironmanmissile'&&me.stateTime>0.55)me.state='idle';
@@ -1693,43 +1666,6 @@ function startGomuBazooka(){
   sendMsg({type:'attack',kind:'gomubazooka'});
 }
 
-function startGomuShield(){
-  // 앞아래뒤 + S : Inflate body. ONLY reflects projectiles. Cannot attack while active.
-  // Toggle off with 앞아래뒤+S again. Jump still allowed.
-  me.state='gomushield';me.stateTime=0;me.vx=0;
-  me.skillBanner={text:'고무고무 방패!! (투사체 반사)',color:'#ffd060',time:0};
-  me.balloonShield=true;
-  me.inputHistory=[];
-  sfxGomuShield();
-  flash('255,220,120',0.35);
-  shake(4);
-  // Inflate burst
-  for(let i=0;i<18;i++){
-    const ang=Math.random()*Math.PI*2;
-    spawnP({x:me.x,y:me.y-30,
-      vx:Math.cos(ang)*4,vy:Math.sin(ang)*3-0.5,
-      life:28,maxLife:28,type:'spark',color:i%2?'#ffe080':'#ffa040',size:4,gravity:0.05});
-  }
-  spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
-    life:28,maxLife:28,type:'shockwave',
-    color:'rgba(255,200,100,0.9)',size:5,maxR:75,gravity:0});
-  // Bouncy ring effect
-  setTimeout(()=>{
-    if(!me||me.state!=='gomushield')return;
-    spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
-      life:20,maxLife:20,type:'shockwave',
-      color:'rgba(255,180,80,0.7)',size:3,maxR:55,gravity:0});
-  },200);
-  // End-of-shield: clear flag (auto). Use session id to ignore stale timers.
-  me._shieldSession=(me._shieldSession||0)+1;
-  const session=me._shieldSession;
-  setTimeout(()=>{
-    if(!me||me._shieldSession!==session)return;
-    if(me.state==='gomushield')endGomuShield();
-    else me.balloonShield=false;
-  },GOMU_SHIELD_DUR*1000);
-  sendMsg({type:'attack',kind:'gomushield'});
-}
 // ===== 도깨비 참수 (검 + 앞↓앞 + A) =====
 function startDokebi(){
   me.state='dokebi';me.stateTime=0;me.vx=0;
@@ -2461,29 +2397,6 @@ function updateGomuStamp(dt){
     me.vx=0;
   }
 }
-function endGomuShield(){
-  if(!me||me.state!=='gomushield')return;
-  me.state='idle';me.stateTime=0;
-  me.balloonShield=false;
-  me.skillBanner=null;
-  me.inputHistory=[];
-  // Pop / deflate visuals
-  flash('255,200,80',0.25);
-  shake(3);
-  for(let k=0;k<16;k++){
-    const ang=Math.random()*Math.PI*2;
-    spawnP({x:me.x,y:me.y-30,
-      vx:Math.cos(ang)*(2+Math.random()*3),vy:Math.sin(ang)*2-0.5,
-      life:18,maxLife:18,type:'spark',color:k%2?'#ffe080':'#ff8030',size:3,gravity:0.12});
-  }
-  spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
-    life:18,maxLife:18,type:'shockwave',
-    color:'rgba(255,200,100,0.85)',size:5,maxR:50,gravity:0});
-  // Deflate sound
-  tone(600,0.18,'sawtooth',0.06,150);
-  tone(200,0.14,'sine',0.05,80,0.08);
-}
-
 function sfxSamchunSlash(){
   // 채챙! metallic clang
   tone(2400+Math.random()*400,0.05,'square',0.07,1500);
@@ -2921,35 +2834,6 @@ function updateProjectiles(){
       const body=getBodyBox(me);
       const projL=pr.x-pr.r,projT=pr.y-8,projW=pr.r*2,projH=16;
       if(rectsHit(projL,projT,projW,projH,body.x,body.y,body.w,body.h)){
-        // Gomu Shield: REFLECT projectile back (becomes mine, double speed)
-        if(me.state==='gomushield'||me.balloonShield){
-          sfxBlock();
-          flash('255,220,120',0.4);
-          shake(6);
-          // Reflect: change owner + reverse + double speed
-          pr.owner=myIdx;
-          pr.vx=-pr.vx*1.6;
-          pr.r+=2; // bigger
-          pr.dmg=Math.floor(pr.dmg*1.2);
-          pr.hue=myIdx===0?210:330;
-          // Bounce burst
-          for(let k=0;k<18;k++){
-            const ang=Math.random()*Math.PI*2;
-            spawnP({x:pr.x,y:pr.y,
-              vx:Math.cos(ang)*(2+Math.random()*4),vy:Math.sin(ang)*3-1,
-              life:24,maxLife:24,type:'spark',color:k%2?'#ffe080':'#ff8030',size:4,gravity:0.1});
-          }
-          spawnP({x:pr.x,y:pr.y,vx:0,vy:0,
-            life:24,maxLife:24,type:'shockwave',
-            color:'rgba(255,200,100,0.9)',size:5,maxR:65,gravity:0});
-          spawnP({x:pr.x,y:pr.y,vx:0,vy:0,
-            life:14,maxLife:14,type:'star',
-            color:'#ffd060',size:14,rot:0,rotV:0.5,gravity:0});
-          toast('🌾 고무고무 반사!! 1.6배 속도',1400);
-          // Tell opponent we reflected this projectile (broadcast new projectile from us)
-          sendMsg({type:'projectile',x:pr.x,y:pr.y,vx:pr.vx,dmg:pr.dmg,owner:myIdx});
-          continue;
-        }
         // Block: hadouken cancelled, no damage
         if(me.blocking){
           sfxBlock();
@@ -3713,59 +3597,7 @@ function drawStickman(p){
 
   const LW=3.5;
 
-  // Gomu Gomu Shield: render inflated balloon body OVER everything else and skip normal stickman
-  if(p.state==='gomushield'){
-    const tt=p.stateTime;
-    const inflate=tt<0.18?(tt/0.18):tt>(GOMU_SHIELD_DUR-0.2)?Math.max(0,(GOMU_SHIELD_DUR-tt)/0.2):1;
-    const wobble=Math.sin(tt*16)*1.8;
-    const bodyR=38*inflate;
-    const bodyH=46*inflate;
-    const cx=0,cy=-30;
-    // Soft outer glow
-    ctx.save();
-    const auraGrd=ctx.createRadialGradient(cx,cy,bodyR*0.4,cx,cy,bodyR*1.7);
-    auraGrd.addColorStop(0,'rgba(255,220,120,0.55)');
-    auraGrd.addColorStop(1,'rgba(255,180,60,0)');
-    ctx.fillStyle=auraGrd;
-    ctx.beginPath();ctx.ellipse(cx,cy,bodyR*1.7,bodyH*1.7,0,0,Math.PI*2);ctx.fill();
-    ctx.restore();
-    // Balloon body with gradient
-    const grd=ctx.createRadialGradient(cx-bodyR*0.35,cy-bodyH*0.4,bodyR*0.15,cx,cy,bodyR*1.1);
-    grd.addColorStop(0,'#fff8d8');
-    grd.addColorStop(0.45,'#ffd060');
-    grd.addColorStop(0.85,'#e88030');
-    grd.addColorStop(1,'#a04010');
-    ctx.fillStyle=grd;
-    ctx.strokeStyle='#7a3010';ctx.lineWidth=2.5;
-    ctx.beginPath();
-    ctx.ellipse(cx,cy,bodyR+wobble*0.4,bodyH+wobble*0.5,0,0,Math.PI*2);
-    ctx.fill();ctx.stroke();
-    // Highlight shine
-    ctx.fillStyle='rgba(255,255,255,0.55)';
-    ctx.beginPath();ctx.ellipse(cx-bodyR*0.4,cy-bodyH*0.45,bodyR*0.28,bodyH*0.18,-0.3,0,Math.PI*2);ctx.fill();
-    // Tiny face on the balloon
-    ctx.fillStyle='#000';
-    ctx.beginPath();ctx.arc(cx-3,cy-2,1.4,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(cx+3,cy-2,1.4,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle='#000';ctx.lineWidth=1;
-    ctx.beginPath();ctx.arc(cx,cy+5,3,0.2,Math.PI-0.2);ctx.stroke();
-    // Straw hat sitting on top of balloon
-    drawStrawHat(cx,cy-bodyH*0.92,bodyR*0.65);
-    // Bouncy spark particles around occasionally (low rate — shield lasts 5s)
-    if(Math.random()<0.12){
-      const ang=Math.random()*Math.PI*2;
-      const r=bodyR+8;
-      spawnP({x:p.x+Math.cos(ang)*r,y:p.y+cy+Math.sin(ang)*r,
-        vx:Math.cos(ang)*1.5,vy:Math.sin(ang)*1.2,
-        life:14,maxLife:14,type:'spark',color:'#ffd060',size:3,gravity:0.05});
-    }
-    // ============== END EARLY: skip stickman drawing ==============
-    // (still need to render banner and name tag below, handled outside this function via early return path)
-    // Save flag so the outer code knows
-    ctx._skipNormalRender=true;
-  }
-
-  if(!ctx._skipNormalRender){
+  {
   ctx.strokeStyle=baseColor;ctx.fillStyle=baseColor;
   ctx.lineWidth=LW;
 
@@ -4547,10 +4379,9 @@ function drawStickman(p){
     ctx.beginPath();ctx.arc(6+reach,-44,8,0,Math.PI*2);ctx.stroke();
     ctx.restore();
   }
-  } // end if(!ctx._skipNormalRender)
+  }
 
   ctx.restore();
-  ctx._skipNormalRender=false;
   // (iframe flash removed - no flicker)
 
   // Attack swooshes
@@ -4963,14 +4794,6 @@ function getPose(p,t){
       pose.lArm.j3={x:-8,y:-32};
       pose.rArm.j3={x:8,y:-32};
     }
-  } else if(p.state==='gomushield'){
-    // Compact pose tucked inside the inflated body
-    pose.head={x:0,y:-32};
-    pose.spine={top:{x:0,y:-28},bot:{x:0,y:-14}};
-    pose.lArm={j1:{x:-3,y:-26},j2:{x:-7,y:-21},j3:{x:-9,y:-17}};
-    pose.rArm={j1:{x:3,y:-26},j2:{x:7,y:-21},j3:{x:9,y:-17}};
-    pose.lLeg={j1:{x:-2,y:-14},j2:{x:-5,y:-8},j3:{x:-5,y:-3}};
-    pose.rLeg={j1:{x:2,y:-14},j2:{x:5,y:-8},j3:{x:5,y:-3}};
   } else if(p.state==='hit'){
     const k=Math.min(1,p.stateTime*4);
     pose.head.x=-2*k;
@@ -5310,7 +5133,6 @@ function tickSkillBanners(dt){
       if(cur!==prev){
         if(cur==='gomupistol'){p.skillBanner={text:'고무고무 총!!',color:'#ff5050',time:0};sfxGomuPistol();}
         else if(cur==='gomubazooka'){p.skillBanner={text:'고무고무 바주카!!',color:'#ff8030',time:0};sfxGomuBazooka();}
-        else if(cur==='gomushield'){p.skillBanner={text:'고무고무 방패!! (투사체 반사)',color:'#ffd060',time:0};sfxGomuShield();}
         else if(cur==='dokebi'){p.skillBanner={text:'도깨비 참수!!',color:'#aa44ff',time:0};sfxDokebiCharge();}
         else if(cur==='gomustamp'){p.skillBanner={text:'고무고무 스탬프!!',color:'#ff5050',time:0};sfxGomuVoice(true);}
         else if(cur==='ironmanmissile'){p.skillBanner={text:'🚀 미사일!!',color:'#ff7030',time:0};sfxIronmanMissile();}
