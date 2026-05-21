@@ -267,22 +267,27 @@ const GOMU_SHIELD_DUR=5.0;
 // Spin kick (회오리차기) - 앞↓뒤 + S
 const SPINKICK_COOLDOWN=1.0;  // 사용 후 1초 딜레이
 // Dokebi (도깨비 참수) - sword + 앞↓앞 + A
-const DOKEBI_DMG=96;          // 도깨비 2배 (48→96)
+const DOKEBI_DMG=67;          // 70% 조정 (96→67)
 const DOKEBI_COOLDOWN=6;      // 쿨다운 15→6
 const DOKEBI_CHARGE=0.5;      // 차징 1.0→0.5 (반)
 const DOKEBI_TREMOR=0.18;     // 떨림 0.35→0.18 (반)
 const DOKEBI_AFTER=0.30;      // 회복 0.55→0.30 (반)
-// 고무고무 jet 채찍 - straw + 앞↓뒤 + S (도깨비참수와 동일 스탯)
-const JET_WHIP_DMG=96;
+// 고무고무 스탬프 - straw + 앞↓뒤 + S (도깨비참수와 동일 스탯)
+const JET_WHIP_DMG=67;        // 도깨비와 동일
 const JET_WHIP_COOLDOWN=6;
-const JET_WHIP_CHARGE=0.18;   // 점프 + 채찍 늘림
-const JET_WHIP_STRIKE=0.32;   // 채찍 임팩트 시점
-const JET_WHIP_AFTER=0.20;    // 회복
+const JET_WHIP_CHARGE=0.18;
+const JET_WHIP_STRIKE=0.32;
+const JET_WHIP_AFTER=0.20;
 // Ironman skills
 const IRONMAN_MISSILE_DMG=18;       // hadouken 12 * 1.5
 const IRONMAN_HOMING_DMG=9;         // per missile, 2 missiles total = 18 (kick x 2)
-const IRONMAN_LASER_DMG=48;         // 도깨비 참수와 동일
-const IRONMAN_LASER_COOLDOWN=20;
+const IRONMAN_LASER_DMG=67;         // 도깨비 참수와 동일 (67)
+const IRONMAN_LASER_COOLDOWN=6;     // 도깨비와 동일 (6초)
+// 친구 부르기 타이밍 (도깨비 charge/strike/after = 0.5/0.18/0.30s)
+const IRONMAN_LASER_DESCEND=0.30;
+const IRONMAN_LASER_CHARGE=0.50;
+const IRONMAN_LASER_FIRE=0.18;
+const IRONMAN_LASER_ASCEND=0.30;
 const HADO_SPEED=6.5;
 // Hitbox dimensions (pixels). Reach = extend in front from attacker center
 const PUNCH_REACH=40;
@@ -792,7 +797,7 @@ function handleMsg(d){
     // We just play visual/sound for them
   } else if(d.type==='hit'){
     // Opponent says I got hit
-    if(me)applyDamageToMe(d.dmg,d.kbDir,d.kind,!!d.bypass);
+    if(me)applyDamageToMe(d.dmg,d.kbDir,d.kind,!!d.bypass,!!d.noBlock);
   } else if(d.type==='projectile'){
     // Spawn projectile (handle missile/homing kinds)
     const kind=d.kind||'hadouken';
@@ -949,7 +954,8 @@ function newPlayer(idx){
     dokebiPhase:null, // 'charge' | 'tremor' | 'recover'
     dokebiTargetX:0,  // teleport destination
     ironmanLaserCooldown:0, // 친구 아이언맨 레이저 cooldown
-    spinkickCooldown:0      // 회오리차기 cooldown (1초)
+    spinkickCooldown:0,     // 회오리차기 cooldown (1초)
+    gomuStampCooldown:0     // 고무고무 스탬프 cooldown (6초)
   };
 }
 function applyItemEffects(p){
@@ -1058,11 +1064,12 @@ function updateMe(dt){
   // Decay cooldowns
   if(me.ironmanLaserCooldown>0)me.ironmanLaserCooldown=Math.max(0,me.ironmanLaserCooldown-dt);
   if(me.spinkickCooldown>0)me.spinkickCooldown=Math.max(0,me.spinkickCooldown-dt);
+  if(me.gomuStampCooldown>0)me.gomuStampCooldown=Math.max(0,me.gomuStampCooldown-dt);
   // Auto-face opp every frame (works during jump + most actions).
   // Lock facing only during states where mid-action flip would break the move:
   // hit/dead (reeling), dokebi (locked teleport vector), samchun (locked slash arc),
   // spinkick (locked forward-rush vector - opp jumping over must NOT flip our direction).
-  if(opp && !['hit','dead','dokebi','samchun','spinkick'].includes(me.state)){
+  if(opp && !['hit','dead','dokebi','samchun','spinkick','gomustamp'].includes(me.state)){
     me.facing=opp.x>me.x?1:-1;
   }
   // Block: shield+L OR holding back direction (back-walk = guard, like classic 2D fighters)
@@ -1071,13 +1078,13 @@ function updateMe(dt){
   const blockingByShield=me.items.has('shield')&&held(KB.block)&&me.onGround;
   me.blocking=(blockingByBack||blockingByShield)&&me.state!=='hit';
   // Crouching: hold ↓ on ground, while not attacking/hit
-  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state);
+  me.crouching=me.onGround&&held(KB.down)&&!['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser','gomustamp'].includes(me.state);
 
   // ===== Double-tap detection (forward/back dash) =====
   const nowMs=performance.now();
   const fwdKey=me.facing>0?KB.right:KB.left;
   const backKey=me.facing>0?KB.left:KB.right;
-  const skipDash=['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state);
+  const skipDash=['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser','gomustamp'].includes(me.state);
   // Forward dash (must be CONSECUTIVE forward presses without down/back in between)
   if(KP[fwdKey] && me.onGround && !skipDash){
     const hist=me.inputHistory;
@@ -1130,7 +1137,7 @@ function updateMe(dt){
     }
   }
   // Movement
-  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state)){
+  if(me.dashTime<=0 && !['punch','kick','hadouken','shoryuken','hit','samchun','spinkick','gomupistol','gomubazooka','dokebi','ironmanmissile','ironmanhoming','ironmanlaser','gomustamp'].includes(me.state)){
     let dx=0;
     if(held(KB.left))dx-=1;
     if(held(KB.right))dx+=1;
@@ -1193,7 +1200,7 @@ function updateMe(dt){
   if(me.onGround && me.items.has('jacket')) me.flyTime=2;
   else if(me.onGround) me.flyTime=0;
   // Attacks (block during special states)
-  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield','dokebi','ironmanmissile','ironmanhoming','ironmanlaser'].includes(me.state)){
+  if(!['hit','hadouken','shoryuken','samchun','spinkick','gomupistol','gomubazooka','gomushield','dokebi','ironmanmissile','ironmanhoming','ironmanlaser','gomustamp'].includes(me.state)){
     // Force-update facing the instant an attack is initiated so jump-kick / dash-punch
     // never whiffs in the wrong direction even when opp crossed over mid-air.
     if((pressed(KB.punch)||pressed(KB.kick))&&opp){
@@ -1219,7 +1226,12 @@ function updateMe(dt){
     } else if(pressed(KB.kick)){
       const sp=checkSpecial();
       if(sp==='spinkick'){
-        if(me.items.has('straw'))startGomuShield();
+        if(me.items.has('straw')){
+          if(me.gomuStampCooldown>0){
+            toast('고무고무 스탬프 쿨다운: '+Math.ceil(me.gomuStampCooldown)+'초',1200);
+            startKick();
+          } else startGomuStamp();
+        }
         else if(me.items.has('ironman')){
           if(me.ironmanLaserCooldown>0){
             toast('친구 아이언맨 쿨다운: '+Math.ceil(me.ironmanLaserCooldown)+'초',1200);
@@ -1336,6 +1348,7 @@ function updateMe(dt){
   else if(me.state==='gomubazooka'&&me.stateTime>0.7)me.state='idle';
   else if(me.state==='gomushield'&&me.stateTime>GOMU_SHIELD_DUR)me.state='idle';
   else if(me.state==='dokebi'&&me.stateTime>(DOKEBI_CHARGE+DOKEBI_TREMOR+DOKEBI_AFTER))me.state='idle';
+  else if(me.state==='gomustamp'&&me.stateTime>(JET_WHIP_CHARGE+JET_WHIP_STRIKE+JET_WHIP_AFTER))me.state='idle';
   else if(me.state==='ironmanmissile'&&me.stateTime>0.55)me.state='idle';
   else if(me.state==='ironmanhoming'&&me.stateTime>0.70)me.state='idle';
   else if(me.state==='ironmanlaser'&&me.stateTime>0.80)me.state='idle';
@@ -1404,6 +1417,7 @@ function updateMe(dt){
   if(!me.onGround&&['idle','walk'].includes(me.state))me.state='jump';
   // Dokebi update (charge → tremor → teleport → recover)
   if(me.state==='dokebi')updateDokebi(dt);
+  if(me.state==='gomustamp')updateGomuStamp(dt);
 }
 
 function startPunch(){
@@ -1723,6 +1737,9 @@ function startDokebi(){
   me.iframe=DOKEBI_CHARGE+DOKEBI_TREMOR+0.15;
   me.dokebiTeleported=false;
   me.dokebiTremor=0;
+  me._dokebiPulse1=false;
+  me._dokebiPulse2=false;
+  me._dokebiPulse3=false;
   me.dokebiOriginX=me.x;
   me.dokebiTargetX=Math.max(30,Math.min(W-30,me.x+me.facing*W*0.5));
   me.dokebiCooldown=DOKEBI_COOLDOWN;
@@ -1746,30 +1763,65 @@ function updateDokebi(dt){
   if(!me||me.state!=='dokebi')return;
   const t=me.stateTime;
   if(t<DOKEBI_CHARGE){
-    // Charge phase: dark spiral converging
+    // Charge phase: 기 모으는 효과 - dark spiral converging into body
     me.vx=0;
-    if(Math.random()<0.7){
-      const ang=Math.random()*Math.PI*2;
-      const r=25+Math.random()*18;
+    const chargeRatio=t/DOKEBI_CHARGE;
+    // 강한 수렴 입자 - 멀리서부터 몸으로 빨려들어옴
+    const swarmRate=4+Math.floor(chargeRatio*6);
+    for(let k=0;k<swarmRate;k++){
+      if(Math.random()<0.85){
+        const ang=Math.random()*Math.PI*2;
+        const r=55+Math.random()*30-chargeRatio*25;
+        spawnP({
+          x:me.x+Math.cos(ang)*r,y:me.y-30+Math.sin(ang)*r*0.65,
+          vx:-Math.cos(ang)*(2.5+chargeRatio*3),vy:-Math.sin(ang)*(2+chargeRatio*2),
+          life:18,maxLife:18,type:'energy',
+          color:Math.random()<0.5?'rgba(170,80,255,1)':'rgba(255,60,140,1)',
+          size:2.5+Math.random()*2.5,gravity:0
+        });
+      }
+    }
+    // 몸 주위 오라 - 캐릭터 몸에 보라색 기운
+    if(Math.random()<0.85){
+      const ay=-10-Math.random()*60;
       spawnP({
-        x:me.x+Math.cos(ang)*r,y:me.y-30+Math.sin(ang)*r*0.7,
-        vx:-Math.cos(ang)*r*0.10,vy:-Math.sin(ang)*r*0.08,
-        life:14,maxLife:14,type:'energy',
-        color:Math.random()<0.5?'rgba(170,80,255,1)':'rgba(255,60,140,1)',
-        size:3+Math.random()*2,gravity:0
+        x:me.x+(Math.random()-0.5)*22,y:me.y+ay,
+        vx:(Math.random()-0.5)*0.5,vy:-0.6-Math.random()*0.8,
+        life:18,maxLife:18,type:'spark',
+        color:Math.random()<0.5?'#c890ff':'#ff70b0',size:2.5+Math.random()*1.5,gravity:0
+      });
+    }
+    // 발 밑 마법진 - 회전하는 효과 (땅에 펄스로 그려짐)
+    if(Math.random()<0.55){
+      const ang=(t*4+Math.random()*0.4)*Math.PI;
+      const r=22+Math.sin(t*8)*4;
+      spawnP({
+        x:me.x+Math.cos(ang)*r,y:GROUND_Y-3+Math.sin(ang)*r*0.25,
+        vx:0,vy:-0.2-Math.random()*0.3,
+        life:14,maxLife:14,type:'spark',
+        color:'#d8a0ff',size:3+Math.random()*1.5,gravity:0
+      });
+    }
+    // 땅에서 솟아오르는 기운
+    if(Math.random()<0.5){
+      spawnP({
+        x:me.x+(Math.random()-0.5)*42,y:GROUND_Y-2,
+        vx:(Math.random()-0.5)*0.4,vy:-1.5-Math.random()*1.2,
+        life:22,maxLife:22,type:'spark',
+        color:Math.random()<0.5?'rgba(170,80,255,1)':'rgba(220,140,255,1)',size:2.5+Math.random()*1.5,gravity:-0.02
       });
     }
     // Falling dark mist
-    if(Math.random()<0.4){
+    if(Math.random()<0.5){
       spawnP({
-        x:me.x+(Math.random()-0.5)*36,y:me.y-60-Math.random()*20,
+        x:me.x+(Math.random()-0.5)*40,y:me.y-65-Math.random()*25,
         vx:(Math.random()-0.5)*0.4,vy:0.3+Math.random()*0.4,
-        life:30,maxLife:30,type:'smoke',
+        life:32,maxLife:32,type:'smoke',
         size:5+Math.random()*3,gravity:0
       });
     }
     // Eerie purple electric arcs around
-    if(Math.random()<0.20){
+    if(Math.random()<0.30){
       const ang=Math.random()*Math.PI*2;
       spawnP({
         x:me.x+Math.cos(ang)*22,y:me.y-30+Math.sin(ang)*30,
@@ -1777,6 +1829,36 @@ function updateDokebi(dt){
         life:6,maxLife:6,type:'arc',
         color:'rgba(200,100,255,1)',gravity:0
       });
+    }
+    // 칼 오라 - 검에서 보라빛 기운
+    if(Math.random()<0.4){
+      const swordTipX=me.x+me.facing*(26+Math.random()*8);
+      const swordTipY=me.y-50+Math.random()*16;
+      spawnP({
+        x:swordTipX,y:swordTipY,
+        vx:me.facing*0.5,vy:-1-Math.random()*0.8,
+        life:14,maxLife:14,type:'spark',
+        color:'rgba(220,140,255,1)',size:2.5+Math.random()*1.5,gravity:0
+      });
+    }
+    // 차징 펄스 충격파 (3번)
+    if(!me._dokebiPulse1 && t>DOKEBI_CHARGE*0.30){
+      me._dokebiPulse1=true;
+      spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
+        life:18,maxLife:18,type:'shockwave',
+        color:'rgba(170,80,255,0.65)',size:4,maxR:55,gravity:0});
+    }
+    if(!me._dokebiPulse2 && t>DOKEBI_CHARGE*0.60){
+      me._dokebiPulse2=true;
+      spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
+        life:20,maxLife:20,type:'shockwave',
+        color:'rgba(200,100,255,0.75)',size:4,maxR:65,gravity:0});
+    }
+    if(!me._dokebiPulse3 && t>DOKEBI_CHARGE*0.85){
+      me._dokebiPulse3=true;
+      spawnP({x:me.x,y:me.y-30,vx:0,vy:0,
+        life:22,maxLife:22,type:'shockwave',
+        color:'rgba(255,80,180,0.85)',size:5,maxR:80,gravity:0});
     }
   } else if(t<DOKEBI_CHARGE+DOKEBI_TREMOR){
     // Tremor phase: vibrate and intensify
@@ -1869,7 +1951,7 @@ function updateDokebi(dt){
       const oppDodgedJump=!opp.onGround;
       const oppDodgedCrouch=opp.crouching;
       if(oppInPath&&!oppDodgedJump&&!oppDodgedCrouch){
-        sendMsg({type:'hit',dmg:DOKEBI_DMG,kbDir:me.facing,kind:'dokebi'});
+        sendMsg({type:'hit',dmg:DOKEBI_DMG,kbDir:me.facing,kind:'dokebi',noBlock:true});
         spawnHitVisuals(opp.x,opp.y,me.facing,'dokebi');
         // Massive impact at opp
         for(let k=0;k<30;k++){
@@ -2015,7 +2097,7 @@ function updateIronmanBuddies(dt){
     const b=ironmanBuddies[i];
     b.timer+=dt;
     if(b.state==='descend'){
-      b.y+=4.5;
+      b.y+=8;
       // Thruster smoke trail
       if(Math.random()<0.5){
         spawnP({x:b.x+(Math.random()-0.5)*8,y:b.y+12,
@@ -2034,15 +2116,39 @@ function updateIronmanBuddies(dt){
         b.timer=0;
       }
     } else if(b.state==='charge'){
-      // 0.7s charge - particles converging to chest reactor
-      if(Math.random()<0.85){
-        const ang=Math.random()*Math.PI*2;
-        const r=18+Math.random()*15;
-        spawnP({x:b.x+Math.cos(ang)*r,y:b.y+5+Math.sin(ang)*r,
-          vx:-Math.cos(ang)*r*0.10,vy:-Math.sin(ang)*r*0.08,
-          life:10,maxLife:10,type:'energy',color:'rgba(180,220,255,1)',size:3,gravity:0});
+      // charge phase - particles converging to chest reactor + 기 모으는 효과
+      const cr=Math.min(1,b.timer/IRONMAN_LASER_CHARGE);
+      const swarmRate=3+Math.floor(cr*4);
+      for(let k=0;k<swarmRate;k++){
+        if(Math.random()<0.85){
+          const ang=Math.random()*Math.PI*2;
+          const r=30+Math.random()*25-cr*15;
+          spawnP({x:b.x+Math.cos(ang)*r,y:b.y+5+Math.sin(ang)*r,
+            vx:-Math.cos(ang)*(2+cr*3),vy:-Math.sin(ang)*(1.5+cr*2),
+            life:12,maxLife:12,type:'energy',
+            color:Math.random()<0.5?'rgba(180,220,255,1)':'rgba(255,240,180,1)',size:3,gravity:0});
+        }
       }
-      if(b.timer>0.7){
+      // 가슴 리액터 발광
+      if(Math.random()<0.7){
+        spawnP({x:b.x+(Math.random()-0.5)*4,y:b.y+5,
+          vx:(Math.random()-0.5)*0.6,vy:(Math.random()-0.5)*0.6,
+          life:10,maxLife:10,type:'spark',color:'#fff7c0',size:3,gravity:0});
+      }
+      // 펄스 충격파
+      if(!b._pulse1 && b.timer>IRONMAN_LASER_CHARGE*0.45){
+        b._pulse1=true;
+        spawnP({x:b.x,y:b.y+5,vx:0,vy:0,
+          life:16,maxLife:16,type:'shockwave',
+          color:'rgba(180,220,255,0.75)',size:4,maxR:55,gravity:0});
+      }
+      if(!b._pulse2 && b.timer>IRONMAN_LASER_CHARGE*0.85){
+        b._pulse2=true;
+        spawnP({x:b.x,y:b.y+5,vx:0,vy:0,
+          life:20,maxLife:20,type:'shockwave',
+          color:'rgba(255,240,180,0.85)',size:5,maxR:75,gravity:0});
+      }
+      if(b.timer>IRONMAN_LASER_CHARGE){
         b.state='fire';b.timer=0;
         sfxIronmanLaserFire();
         flash('255,255,200',0.5);
@@ -2075,12 +2181,12 @@ function updateIronmanBuddies(dt){
         }
       }
     } else if(b.state==='fire'){
-      // 0.4s firing
-      if(b.timer>0.4){
+      // firing
+      if(b.timer>IRONMAN_LASER_FIRE){
         b.state='ascend';b.timer=0;
       }
     } else if(b.state==='ascend'){
-      b.y-=5;
+      b.y-=8;
       if(Math.random()<0.5){
         spawnP({x:b.x+(Math.random()-0.5)*8,y:b.y+12,
           vx:0,vy:1.5,life:18,maxLife:18,type:'smoke',size:4,gravity:0.05});
@@ -2096,7 +2202,7 @@ function drawIronmanBuddy(b){
   const cx=b.x, cy=b.y;
   // If firing, draw vertical laser beam first (behind buddy)
   if(b.state==='fire'){
-    const t=b.timer/0.4;
+    const t=b.timer/IRONMAN_LASER_FIRE;
     const beamW=20+Math.sin(b.timer*40)*5;
     const fade=t<0.1?t*10:t>0.85?(1-t)*7:1;
     ctx.save();
@@ -2234,6 +2340,127 @@ function drawIronmanBuddy(b){
   ctx.restore();
 }
 
+// ===== 고무고무 스탬프 (straw + 앞↓뒤 + S) =====
+// 제자리 점프 → 발이 채찍처럼 적에게 늘어나 내려치기.
+// 막지 않는 한 무조건 적중. 사정거리 맵 전체.
+function startGomuStamp(){
+  me.state='gomustamp';me.stateTime=0;me.vx=0;
+  me.vy=-JUMP_VEL*0.9; me.onGround=false; // 제자리 점프
+  me.skillBanner={text:'고무고무 스탬프!!',color:'#ff5050',time:0};
+  me.gomuStampCooldown=JET_WHIP_COOLDOWN;
+  me.iframe=0.05;
+  me.inputHistory=[];
+  me._stampDealt=false;
+  // Voice + impact sound
+  sfxGomuVoice(true);
+  setTimeout(()=>{
+    if(!AC||muted)return;
+    // Heavy whip swoosh
+    noise(0.16,0.10,4200,JET_WHIP_CHARGE);
+    tone(180,0.20,'sawtooth',0.10,80,JET_WHIP_CHARGE);
+    tone(1200,0.06,'square',0.06,400,JET_WHIP_CHARGE);
+  },0);
+  flash('255,80,80',0.3);
+  shake(4);
+  // Initial windup burst at foot
+  for(let i=0;i<12;i++){
+    const ang=Math.random()*Math.PI*2;
+    spawnP({x:me.x,y:me.y-10,
+      vx:Math.cos(ang)*2,vy:Math.sin(ang)*1.5-1,
+      life:18,maxLife:18,type:'spark',color:i%2?'#ff5050':'#ffaa44',size:3,gravity:0.05});
+  }
+  sendMsg({type:'attack',kind:'gomustamp'});
+}
+function updateGomuStamp(dt){
+  if(!me||me.state!=='gomustamp')return;
+  const t=me.stateTime;
+  // Anchor vertical: gentle hop then settle
+  if(t<JET_WHIP_CHARGE){
+    // 점프업 - 다리에 기 모으는 효과
+    me.vx=0;
+    const chargeRatio=t/JET_WHIP_CHARGE;
+    // 다리에 빨간 기 모임
+    if(Math.random()<0.9){
+      const ang=Math.random()*Math.PI*2;
+      const r=20+Math.random()*15-chargeRatio*10;
+      spawnP({
+        x:me.x+Math.cos(ang)*r,y:me.y-5+Math.sin(ang)*r*0.7,
+        vx:-Math.cos(ang)*(2+chargeRatio*2),vy:-Math.sin(ang)*(1.5+chargeRatio*1.5),
+        life:14,maxLife:14,type:'energy',
+        color:Math.random()<0.5?'rgba(255,80,80,1)':'rgba(255,170,60,1)',
+        size:2.5+Math.random()*2,gravity:0
+      });
+    }
+    // 몸 주위 붉은 오라
+    if(Math.random()<0.6){
+      spawnP({
+        x:me.x+(Math.random()-0.5)*20,y:me.y-Math.random()*60,
+        vx:(Math.random()-0.5)*0.4,vy:-1-Math.random()*0.6,
+        life:16,maxLife:16,type:'spark',
+        color:Math.random()<0.5?'#ff7050':'#ffa040',size:2+Math.random()*1.5,gravity:0
+      });
+    }
+  } else if(t<JET_WHIP_CHARGE+JET_WHIP_STRIKE){
+    // 채찍 뻗기 - 공중 정지
+    me.vx=0;
+    me.vy=-1.5; // hover
+    // 발에서 뻗어나가는 빨간 잔상
+    if(Math.random()<0.85){
+      const ext=(t-JET_WHIP_CHARGE)/JET_WHIP_STRIKE;
+      const dx=me.facing*ext*120+(Math.random()-0.5)*30;
+      const dy=15+ext*10+(Math.random()-0.5)*20;
+      spawnP({
+        x:me.x+dx,y:me.y+dy,
+        vx:me.facing*(2+Math.random()*3),vy:(Math.random()-0.5)*2,
+        life:14,maxLife:14,type:'spark',
+        color:Math.random()<0.5?'#ff5050':'#ffd070',size:3+Math.random()*1.5,gravity:0
+      });
+    }
+    // Striking moment (impact at strike midpoint)
+    if(!me._stampDealt && t>JET_WHIP_CHARGE+JET_WHIP_STRIKE*0.55){
+      me._stampDealt=true;
+      // Visuals at opp position
+      shake(15);
+      flash('255,100,80',0.6);
+      freeze(0.12);
+      if(opp&&opp.state!=='dead'){
+        // 항상 hit. 막으면 blocking 처리로 데미지 감소, 안 막으면 풀데미지.
+        sendMsg({type:'hit',dmg:JET_WHIP_DMG,kbDir:me.facing,kind:'gomustamp',bypass:true});
+        spawnHitVisuals(opp.x,opp.y,me.facing,'gomustamp');
+        // Ground crater dust at opp's feet
+        for(let i=0;i<20;i++){
+          const ang=(Math.random()-0.5)*Math.PI*0.6+Math.PI*1.5;
+          spawnP({x:opp.x+(Math.random()-0.5)*40,y:GROUND_Y-2,
+            vx:Math.cos(ang)*(3+Math.random()*5),vy:Math.sin(ang)*4-0.5,
+            life:36,maxLife:36,type:'smoke',
+            size:6+Math.random()*4,gravity:-0.04});
+        }
+        // Foot impact burst
+        for(let k=0;k<32;k++){
+          const ang=Math.random()*Math.PI*2;
+          spawnP({x:opp.x,y:opp.y-10,
+            vx:Math.cos(ang)*(4+Math.random()*6),vy:Math.sin(ang)*5-2,
+            life:34,maxLife:34,type:'spark',
+            color:k%3===0?'#fff':k%3===1?'#ff5050':'#ffe080',size:4+Math.random()*1.5,gravity:0.15});
+        }
+        // 큰 충격파 2겹
+        spawnP({x:opp.x,y:GROUND_Y-2,vx:0,vy:0,
+          life:26,maxLife:26,type:'shockwave',
+          color:'rgba(255,80,80,0.9)',size:6,maxR:95,gravity:0});
+        spawnP({x:opp.x,y:GROUND_Y-2,vx:0,vy:0,
+          life:32,maxLife:32,type:'shockwave',
+          color:'rgba(255,200,80,0.75)',size:5,maxR:130,gravity:0});
+        // 별 모양 폭발
+        spawnP({x:opp.x,y:opp.y-30,vx:0,vy:0,
+          life:24,maxLife:24,type:'star',
+          color:'#ff6040',size:24,rot:0,rotV:0.5,gravity:0});
+      }
+    }
+  } else {
+    // Recovery
+    me.vx=0;
+  }
+}
 function endGomuShield(){
   if(!me||me.state!=='gomushield')return;
   me.state='idle';me.stateTime=0;
@@ -2478,14 +2705,14 @@ function spawnHitVisuals(tx,ty,kbDir,source){
   }
 }
 
-function applyDamageToMe(dmg,kbDir,source,bypassIframe){
+function applyDamageToMe(dmg,kbDir,source,bypassIframe,noBlock){
   if(!me||me.state==='dead')return;
   if(me.iframe>0&&!bypassIframe)return;
   let actualDmg=Math.max(1,dmg-getDefense(me));
   // Shield: passive 33% damage reduction (electric aura)
   if(me.items.has('shield'))actualDmg=Math.max(1,Math.floor(actualDmg*0.67));
   const isSpecial=(source==='hadouken'||source==='shoryuken');
-  if(me.blocking){
+  if(me.blocking && !noBlock){
     actualDmg=Math.max(1,Math.floor(actualDmg*0.2));
     sfxBlock();
     me.vx+=kbDir*1;
@@ -4194,6 +4421,60 @@ function drawStickman(p){
     ctx.arc(24,-34,10,0,Math.PI*2);
     ctx.fill();
   }
+  // Gomu Stamp whip-leg trail (rubbery extending line with sine wave)
+  if(p.state==='gomustamp'){
+    const tt=p.stateTime;
+    if(tt>=JET_WHIP_CHARGE&&tt<JET_WHIP_CHARGE+JET_WHIP_STRIKE){
+      const stretchT=(tt-JET_WHIP_CHARGE)/JET_WHIP_STRIKE;
+      const stretch=stretchT<0.5?(stretchT/0.5):Math.max(0,1-(stretchT-0.5)/0.5);
+      const reach=12+220*stretch;
+      const sx=2, sy=-26;
+      const fx=10+reach, fy=-12;
+      ctx.save();
+      ctx.lineCap='round';
+      // Outer red glow
+      ctx.strokeStyle='rgba(255,90,80,0.55)';
+      ctx.lineWidth=14;
+      ctx.beginPath();ctx.moveTo(sx,sy);
+      const segs=12;
+      for(let i=1;i<=segs;i++){
+        const t=i/segs;
+        const x=sx+(fx-sx)*t;
+        const y=sy+(fy-sy)*t+Math.sin(tt*32+i*0.7)*3;
+        ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      // Core red line
+      ctx.strokeStyle='#ff3030';
+      ctx.lineWidth=6;
+      ctx.beginPath();ctx.moveTo(sx,sy);
+      for(let i=1;i<=segs;i++){
+        const t=i/segs;
+        const x=sx+(fx-sx)*t;
+        const y=sy+(fy-sy)*t+Math.sin(tt*32+i*0.7)*3;
+        ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      // Inner yellow highlight
+      ctx.strokeStyle='#ffe080';
+      ctx.lineWidth=2.4;
+      ctx.beginPath();ctx.moveTo(sx,sy);
+      for(let i=1;i<=segs;i++){
+        const t=i/segs;
+        const x=sx+(fx-sx)*t;
+        const y=sy+(fy-sy)*t+Math.sin(tt*32+i*0.7)*3;
+        ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      // Big foot at end (impact node)
+      ctx.fillStyle='#ff3030';
+      ctx.beginPath();ctx.arc(fx,fy,7,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
+      ctx.fillStyle='#ffe080';
+      ctx.beginPath();ctx.arc(fx-2,fy-2,2.5,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    }
+  }
   // Gomu Pistol stretching arm visual (rubbery line)
   if(p.state==='gomupistol'){
     const tt=p.stateTime;
@@ -4641,6 +4922,47 @@ function getPose(p,t){
       pose.head.x=2;pose.head.y=-54;
       pose.spine.top.x=2;
     }
+  } else if(p.state==='gomustamp'){
+    const tt=p.stateTime;
+    if(tt<JET_WHIP_CHARGE){
+      // Jumping up — knees tucked, arms back for windup
+      pose.rLeg.j2={x:5,y:-22};
+      pose.rLeg.j3={x:7,y:-15};
+      pose.lLeg.j2={x:-5,y:-22};
+      pose.lLeg.j3={x:-7,y:-15};
+      pose.head.y=-58;
+      pose.lArm.j2={x:-5,y:-48};
+      pose.lArm.j3={x:-11,y:-52};
+      pose.rArm.j2={x:5,y:-48};
+      pose.rArm.j3={x:11,y:-52};
+      pose.spine.top.y=-50;
+    } else if(tt<JET_WHIP_CHARGE+JET_WHIP_STRIKE){
+      // Right leg stretches forward as the whip (sin-eased)
+      const stretchT=(tt-JET_WHIP_CHARGE)/JET_WHIP_STRIKE;
+      const stretch=stretchT<0.5?(stretchT/0.5):Math.max(0,1-(stretchT-0.5)/0.5);
+      const reach=12+220*stretch;
+      pose.rLeg.j1={x:2,y:-26};
+      pose.rLeg.j2={x:8+reach*0.45,y:-22};
+      pose.rLeg.j3={x:10+reach,y:-12};
+      pose.lLeg.j1={x:-2,y:-26};
+      pose.lLeg.j2={x:-3,y:-18};
+      pose.lLeg.j3={x:-2,y:-8};
+      pose.lArm.j2={x:-6,y:-44};
+      pose.lArm.j3={x:-12,y:-40};
+      pose.rArm.j2={x:4,y:-46};
+      pose.rArm.j3={x:6,y:-42};
+      pose.head.x=2;
+      pose.head.y=-54;
+      pose.spine.top.x=1;
+    } else {
+      // Recovery — leg retracted
+      pose.rLeg.j2={x:5,y:-15};
+      pose.rLeg.j3={x:6,y:-5};
+      pose.lLeg.j2={x:-5,y:-15};
+      pose.lLeg.j3={x:-6,y:-5};
+      pose.lArm.j3={x:-8,y:-32};
+      pose.rArm.j3={x:8,y:-32};
+    }
   } else if(p.state==='gomushield'){
     // Compact pose tucked inside the inflated body
     pose.head={x:0,y:-32};
@@ -4990,6 +5312,7 @@ function tickSkillBanners(dt){
         else if(cur==='gomubazooka'){p.skillBanner={text:'고무고무 바주카!!',color:'#ff8030',time:0};sfxGomuBazooka();}
         else if(cur==='gomushield'){p.skillBanner={text:'고무고무 방패!! (투사체 반사)',color:'#ffd060',time:0};sfxGomuShield();}
         else if(cur==='dokebi'){p.skillBanner={text:'도깨비 참수!!',color:'#aa44ff',time:0};sfxDokebiCharge();}
+        else if(cur==='gomustamp'){p.skillBanner={text:'고무고무 스탬프!!',color:'#ff5050',time:0};sfxGomuVoice(true);}
         else if(cur==='ironmanmissile'){p.skillBanner={text:'🚀 미사일!!',color:'#ff7030',time:0};sfxIronmanMissile();}
         else if(cur==='ironmanhoming'){p.skillBanner={text:'🎯 호밍 미사일!! ×2',color:'#aa44ff',time:0};sfxIronmanHoming();}
         else if(cur==='ironmanlaser'){p.skillBanner={text:'🤖 친구 아이언맨!! 레이저 폭격',color:'#5a90ff',time:0};sfxIronmanLaserCharge();}
